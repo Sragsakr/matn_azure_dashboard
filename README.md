@@ -47,8 +47,23 @@ that pulls fresh data from Azure DevOps.
 - Set `AZDO_PAT` (as env var, or in `.streamlit/secrets.toml`) to enable live pulls.
 - Without it, the app falls back to the workbook cache so the UI still opens.
 
-## Deploy on Render (recommended web hosting)
-Render runs the Streamlit app as a live public web service from this repo —
+## Deploy on Hugging Face Spaces (recommended free web hosting)
+Hugging Face Spaces hosts Streamlit apps free and keeps them running (does not sleep),
+so your **Refresh-from-Azure button works live**. Sync this repo into a Space:
+
+1. Create a **read-only** Azure DevOps PAT (Work Items → Read).
+2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → **Create new Space**.
+3. SDK: **Streamlit**. (Optionally link your GitHub repo, or upload these files.)
+4. Before running, the Space needs the secret: in the Space **Settings → Variables and secrets**,
+   add key `AZDO_PAT` = your PAT.
+5. The app auto-loads `dashboard_app.py` and the in-app **"Refresh from Azure DevOps"**
+   button pulls live data on demand.
+
+> The PAT is stored only as a Space secret — never in the repo.
+> No GitHub Pages is used; this is a live server-backed Streamlit app.
+
+## Deploy on Render (alternative web hosting)
+Render also runs the Streamlit app as a live public web service from this repo —
 no GitHub Pages involved. It picks up the included `render.yaml` automatically.
 
 1. Create a **read-only** Azure DevOps PAT (Work Items → Read).
