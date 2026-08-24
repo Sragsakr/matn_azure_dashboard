@@ -47,11 +47,19 @@ that pulls fresh data from Azure DevOps.
 - Set `AZDO_PAT` (as env var, or in `.streamlit/secrets.toml`) to enable live pulls.
 - Without it, the app falls back to the workbook cache so the UI still opens.
 
-### Deploy on Streamlit Community Cloud
-1. Push this repo to GitHub.
-2. On [Streamlit Community Cloud](https://share.streamlit.io), create a new app pointing at `dashboard_app.py`.
-3. Add `AZDO_PAT` as a **secret** in the Streamlit app settings (never in the repo).
-4. The "Refresh from Azure DevOps" button will pull live data on demand.
+## Deploy on Render (recommended web hosting)
+Render runs the Streamlit app as a live public web service from this repo —
+no GitHub Pages involved. It picks up the included `render.yaml` automatically.
+
+1. Create a **read-only** Azure DevOps PAT (Work Items → Read).
+2. On [render.com](https://render.com) sign up with GitHub, then **New + → Web Service**.
+3. Pick the `matn_azure_dashboard` repo. Render auto-detects `render.yaml`.
+4. In **Environment**, add key `AZDO_PAT` = your PAT (a secret, never committed).
+5. Click **Create Web Service** — it builds and serves the dashboard publicly.
+6. The in-app **"Refresh from Azure DevOps"** button pulls live data on demand.
+
+> Note: `render.yaml` keeps the PAT as a Render secret (`sync: false`); it is
+> never stored in the repository.
 
 ## Security notes
 - The PAT is **never** stored in any file; it is read from the `AZDO_PAT` env var only.
