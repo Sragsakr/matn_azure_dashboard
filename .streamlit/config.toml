@@ -1,6 +1,7 @@
 [server]
 headless = true
-port = 8501
+# host/port are supplied by the hosting platform via env when present
+# (Streamlit falls back to these defaults otherwise)
 
 [browser]
 gatherUsageStats = false
