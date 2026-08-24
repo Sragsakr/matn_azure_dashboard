@@ -189,14 +189,20 @@ def read_workbook_items():
 
 
 def load_items(force_pull=True):
-    """Try live Azure pull; fall back to workbook Raw Data."""
+    """Try live Azure pull; fall back to workbook Raw Data.
+    Returns (items, mode). mode in {'live','workbook','empty'}."""
     if force_pull and _pat():
         try:
             raw = pull_from_azure()
-            return [_wi(w) for w in raw], "live"
-        except Exception:
-            pass
-    return read_workbook_items(), "workbook"
+            items = [_wi(w) for w in raw]
+            return items, "live"
+        except Exception as exc:
+            # keep the real error visible (for debugging), fall back to cache
+            st.session_state["last_pull_error"] = str(exc)
+    items = read_workbook_items()
+    if items:
+        return items, "workbook"
+    return [], "empty"
 
 
 # ---------------------------------------------------------------- analysis
@@ -313,12 +319,33 @@ def delivery_action(items, unassigned):
     return "Delivery on track"
 
 
+# ============================================================ UI HELPERS
+def apply_theme():
+    st.markdown(
+        """
+        <style>
+        .block-container { padding-top: 1.2rem; }
+        div[data-testid="stSidebar"] { background: #F4F6FB; }
+        div[data-testid="stMetric"] {
+            background: white; border: 1px solid #E2E8F0; border-radius: 12px;
+            padding: 12px 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        div[data-testid="stMetric"] label { color: #64748B; font-weight:600; }
+        div[data-testid="stMetric"] [data-testid="stMetricValue"] { font-weight:700; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------- rendering
 st.set_page_config(page_title="Delivery Manager — Hoteliana", layout="wide",
                    initial_sidebar_state="expanded")
 
 st.title("🚀 Delivery Manager — Hoteliana")
 st.caption("Azure DevOps delivery control tower. Smart task-centric scope, child→parent roll-up.")
+
+apply_theme()
 
 user_missing = not _pat()
 if user_missing:
@@ -337,12 +364,26 @@ if refresh and _pat():
         except Exception as exc:
             st.sidebar.error(f"Pull failed: {exc}")
 if not items:
-    items, data_mode = load_items(force_pull=bool(refresh and _pat()))
+    # Auto-pull on first load when a secret exists but no local workbook does
+    # (typical on a cloud host): otherwise the app would show "no data".
+    auto = bool(_pat()) and not os.path.exists(WORKBOOK)
+    items, data_mode = load_items(force_pull=bool(refresh and _pat()) or auto)
 
 dev = [i for i in items if i["type"] in DEV_TYPES]
 
 if not dev:
-    st.error("No dev work items found. Set AZDO_PAT to pull from Azure.")
+    st.sidebar.warning("No data loaded.")
+    st.error("No dev work items found.")
+    missing_pat = not _pat()
+    if missing_pat:
+        st.info("`AZDO_PAT` secret is not set. Set it in the hosting platform's secrets "
+                "(Streamlit Cloud → Settings → Secrets) or as the GitHub Actions secret, "
+                "then press **Refresh from Azure DevOps**.")
+    # Show the underlying pull failure so it isn't a silent "nothing on screen"
+    if st.session_state.get("last_pull_error"):
+        st.warning(f"Last Azure pull failed: {st.session_state['last_pull_error']}")
+    st.info("If you are self-hosting without a workbook, the app needs live Azure access "
+            "via AZDO_PAT to load any data.")
     st.stop()
 
 st.sidebar.metric("Data source", data_mode)
@@ -382,6 +423,10 @@ def render_executive():
         f"font-size:20px;font-weight:700'>{verdict} — {delivery_action(dev, all_m['unassigned'])}</div>",
         unsafe_allow_html=True,
     )
+
+    if not dev:
+        st.warning("No work items to chart yet.")
+        return
 
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Story Scope Done", f"{scope['scope_pct'] or 0:.0%}")
