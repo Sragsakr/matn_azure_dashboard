@@ -407,6 +407,8 @@ PAGES = [
     "Active Now",
     "Risks & Aging",
     "Data Quality",
+    "Releases",
+    "Raw Data",
 ]
 page = st.sidebar.radio("📊 Sections", PAGES)
 
@@ -672,6 +674,39 @@ def render_data_quality():
                  use_container_width=True, hide_index=True)
 
 
+# ============================================================ RELEASES
+def render_releases():
+    st.header("🚦 Releases")
+    # Release plans / target dates are not part of the Azure work-item pull.
+    # This mirrors the workbook's "Releases" tab (release intelligence / manual input).
+    release_rows = [{
+        "Version": "No release-plan source in current Azure pull",
+        "Platform": "", "Target Date": None, "Actual Date": None,
+        "Status": "", "Owner": "", "Release Notes": "Connect Azure Pipelines/Delivery Plans or a Target-Date field to populate.",
+    }]
+    st.dataframe(pd.DataFrame(release_rows), use_container_width=True, hide_index=True)
+    st.info("Release dates are not present in the work-item API pull. "
+            "Add a dedicated Azure field (Target Date) or connect Pipelines to auto-populate this tab.")
+
+
+# ============================================================ RAW DATA
+def render_raw_data():
+    st.header("📦 Raw Data — all Azure work items")
+    st.caption("All 546 imported items (incl. test artifacts), exactly as pulled from Azure DevOps.")
+    all_items = items  # already loaded by the app
+    df = pd.DataFrame([{
+        "Work Item ID": i["id"], "Title": i["title"], "Work Item Type": i["type"],
+        "State": i["state"], "Assigned To": i["assignee"], "Iteration Path": i["sprint"],
+        "Area Path": i["area"], "Story Points": i["sp"], "Priority": i["priority"],
+        "Created Date": i["created"], "Changed Date": i["changed"],
+        "Tags": "; ".join(i["tags"]) or "Untagged", "Parent ID": i["parent"], "Azure Link": i["url"],
+    } for i in all_items])
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, hide_index=True, height=520)
+    else:
+        st.info("No raw data loaded. Press Refresh (requires AZDO_PAT) or supply the workbook.")
+
+
 # ---- dispatch
 if page == "Executive Dashboard":
     render_executive()
@@ -691,3 +726,7 @@ elif page == "Risks & Aging":
     render_risks()
 elif page == "Data Quality":
     render_data_quality()
+elif page == "Releases":
+    render_releases()
+elif page == "Raw Data":
+    render_raw_data()
