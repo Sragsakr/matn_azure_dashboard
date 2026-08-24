@@ -1,0 +1,19 @@
+# --- Secrets: NEVER commit ---
+.env
+*.pat
+**/token*
+.pat_backup
+.streamlit/secrets.toml
+
+# --- Tooling / runtime ---
+.venv/
+__pycache__/
+*.pyc
+.sanad/
+
+# --- Local macOS ---
+.DS_Store
+
+# --- Generated workbook (optional; commit it if you want a checked-in copy) ---
+Delivery_Manager_Dashboard.xlsx
+Delivery_Manager_Dashboard_backup.xlsx

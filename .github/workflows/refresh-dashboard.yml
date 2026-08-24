@@ -1,0 +1,37 @@
+name: Refresh Delivery Dashboard
+
+# Trigger manually (via Actions tab "Run workflow" button) OR on a schedule.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Pull Azure data + rebuild dashboard
+        env:
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+        run: python pull_from_azure_devops.py
+
+      - name: Verify workbook rebuilt
+        run: |
+          test -f Delivery_Manager_Dashboard.xlsx && echo "workbook exists"
+
+      - name: Commit updated workbook
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f Delivery_Manager_Dashboard.xlsx
+          git commit -m "chore: refresh delivery dashboard $(date +%Y-%m-%d)" --allow-empty || echo "no changes to commit"
+          git push
