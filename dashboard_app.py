@@ -152,7 +152,10 @@ def _wi(w):
 
 
 def read_workbook_items():
-    """Fallback: read normalized items from the local workbook's Raw Data."""
+    """Fallback: read normalized items from the local workbook's Raw Data.
+    Returns [] when the workbook is absent (e.g. on a cloud host)."""
+    if not os.path.exists(WORKBOOK):
+        return []
     wb = openpyxl.load_workbook(WORKBOOK, data_only=True)
     ws = wb["Raw Data"]
     hdrs = {}  # name -> index handled by positions below
