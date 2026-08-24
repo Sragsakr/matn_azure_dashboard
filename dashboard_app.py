@@ -349,127 +349,300 @@ st.sidebar.metric("Data source", data_mode)
 st.sidebar.metric("Dev scope items", len(dev))
 st.sidebar.metric("All items", len(items))
 
-# ---- Health banner
+# Precompute shared analysis once (executive-only metrics used by sidebar).
 all_m = item_metrics(dev)
 scope = scope_metrics([i for i in dev if i["sprint"] != PB])
 verdict, color = ribbon(scope["scope_pct"], scope["task_pct"], all_m["unassigned"], all_m["stale"])
-st.markdown(
-    f"<div style='background:{color};color:white;padding:14px 20px;border-radius:10px;"
-    f"font-size:20px;font-weight:700'>{verdict} — {delivery_action(dev, all_m['unassigned'])}</div>",
-    unsafe_allow_html=True,
-)
-
-# ---- Top metric cards
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Story Scope Done", f"{scope['scope_pct'] or 0:.0%}")
-c2.metric("Task Completion", f"{scope['task_pct'] or 0:.0%}")
-c3.metric("Active Now", all_m["active"])
-c4.metric("Unassigned", all_m["unassigned"])
-c5.metric("Product Backlog", sum(1 for i in dev if i["sprint"] == PB))
-c6.metric("Stale (≥14d)", all_m["stale"])
-
 prog = type_progress(dev)
 
-# ---- Per-type breakdown + hierarchy
-st.subheader("Completion by work type")
-prog_df = pd.DataFrame([
-    {"Work Type": t, "Total": m["total"], "Done": m["done"], "Completion %": m["pct"] or 0}
-    for t, m in [("Epic", prog["Epic"]), ("Feature", prog["Feature"]),
-                 ("User Story", prog["User Story"]), ("Task", prog["Task"])]
-])
-st.dataframe(prog_df, use_container_width=True, hide_index=True)
-hier_txt = "child→parent roll-up active ✅" if prog["hierarchy_used"] else "own-state (add Parent ID for roll-up)"
-st.caption(f"Hierarchy: {hier_txt}")
-
-# ---- State breakdown
-st.subheader("Work by state")
-state_df = pd.DataFrame([
-    {"State": s, "Items": n} for s, n in Counter(i["state"] for i in dev).most_common()
-])
-col_l, col_r = st.columns([1, 1])
-with col_l:
-    st.bar_chart(state_df.set_index("State"))
-with col_r:
-    st.dataframe(state_df, use_container_width=True, hide_index=True)
-
-# ---- Areas
-st.subheader("Product areas")
-area_df = []
-for area, members in sorted(defaultdict(list, {a: [] for a in {i["area"] for i in dev}}).items(), key=lambda x: -len([i for i in dev if i["area"] == x[0]])):
-    m_scope = scope_metrics([i for i in dev if i["area"] == area])
-    area_df.append({
-        "Area": area,
-        "Stories": m_scope["stories"],
-        "Stories Done": m_scope["stories_done"],
-        "Scope %": m_scope["scope_pct"] or 0,
-        "Tasks": m_scope["tasks"],
-        "Tasks Done": m_scope["tasks_done"],
-        "Task %": m_scope["task_pct"] or 0,
-    })
-st.dataframe(pd.DataFrame(area_df), use_container_width=True, hide_index=True)
-
-# ---- Tag analysis
-st.subheader("Tag analysis")
-tag_map = defaultdict(list)
-for i in dev:
-    for t in (i["tags"] or ["Untagged"]):
-        tag_map[t].append(i)
-tag_df = []
-for tag, members in sorted(tag_map.items(), key=lambda x: -len(x[1])):
-    m_scope = scope_metrics(members)
-    tag_df.append({
-        "Tag": tag, "Items": len(members),
-        "Stories": m_scope["stories"], "Stories Done": m_scope["stories_done"],
-        "Scope %": m_scope["scope_pct"] or 0,
-        "Tasks": m_scope["tasks"], "Tasks Done": m_scope["tasks_done"],
-        "Task %": m_scope["task_pct"] or 0,
-    })
-st.dataframe(pd.DataFrame(tag_df), use_container_width=True, hide_index=True)
-
-# ---- Team analysis (task-centric)
-st.subheader("Team delivery (task-centric)")
-assignee_of_story = defaultdict(set)
-story_by_id = {i["id"]: i for i in dev if i["type"] == "User Story"}
-for i in dev:
-    if i["type"] == "Task" and i["parent"] in story_by_id:
-        assignee_of_story[i["parent"]].add(i["assignee"])
-
-team_rows = []
-groups = defaultdict(list)
-for i in dev:
-    groups[i["assignee"]].append(i)
-for assignee, members in sorted(groups.items(), key=lambda x: -sum(1 for i in x[1] if i["type"] == "Task")):
-    tasks = [i for i in members if i["type"] == "Task"]
-    done_t = sum(is_done(t) for t in tasks)
-    involved = {i["id"] for i in members if i["type"] == "User Story"}
-    for sid, asg in assignee_of_story.items():
-        if assignee in asg:
-            involved.add(sid)
-    full = {sid for sid in involved if story_by_id.get(sid) and is_done(story_by_id[sid])}
-    team_rows.append({
-        "Assignee": assignee,
-        "Tasks": len(tasks), "Tasks Done": done_t,
-        "Task %": done_t / len(tasks) if tasks else None,
-        "Active": sum(i["state"] in ACTIVE for i in members),
-        "Stories Involved": len(involved), "Stories Fully Done": len(full),
-        "Areas": ", ".join(sorted({i["area"] for i in members})),
-    })
-st.dataframe(pd.DataFrame(team_rows), use_container_width=True, hide_index=True)
-
-# ---- Open items / risks
-st.subheader("Open items & aging (task-centric)")
-open_rows = []
-for i in [x for x in dev if not is_done(x)]:
-    open_rows.append({
-        "ID": i["id"], "Title": i["title"], "Type": i["type"], "State": i["state"],
-        "Assignee": i["assignee"], "Sprint": i["sprint"], "Area": i["area"],
-        "Tags": "; ".join(i["tags"]) or "Untagged",
-        "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
-    })
-if open_rows:
-    st.dataframe(pd.DataFrame(open_rows), use_container_width=True, hide_index=True, height=360)
-else:
-    st.success("No open work — all done!")
+# ---- Sidebar navigation: one section per tab, mirroring the Excel workbook
+PAGES = [
+    "Executive Dashboard",
+    "Sprint Summary",
+    "Sprint Board",
+    "Tag Analysis",
+    "Team Analysis",
+    "Area Analysis",
+    "Active Now",
+    "Risks & Aging",
+    "Data Quality",
+]
+page = st.sidebar.radio("📊 Sections", PAGES)
 
 st.caption(f"Refresh pulls directly from {ORG}/{PROJECT}." if data_mode == "live"
-           else f"Showing workbook cache. Set AZDO_PAT + Refresh for live data.")
+           else "Showing workbook cache. Set AZDO_PAT + Refresh for live data.")
+st.divider()
+
+
+# ============================================================ EXECUTIVE
+def render_executive():
+    st.header("🚀 Executive Dashboard")
+    st.markdown(
+        f"<div style='background:{color};color:white;padding:14px 20px;border-radius:10px;"
+        f"font-size:20px;font-weight:700'>{verdict} — {delivery_action(dev, all_m['unassigned'])}</div>",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Story Scope Done", f"{scope['scope_pct'] or 0:.0%}")
+    c2.metric("Task Completion", f"{scope['task_pct'] or 0:.0%}")
+    c3.metric("Active Now", all_m["active"])
+    c4.metric("Unassigned", all_m["unassigned"])
+    c5.metric("Product Backlog", sum(1 for i in dev if i["sprint"] == PB))
+    c6.metric("Stale (≥14d)", all_m["stale"])
+
+    st.subheader("Completion by work type")
+    prog_df = pd.DataFrame([
+        {"Work Type": t, "Total": m["total"], "Done": m["done"], "Completion %": m["pct"] or 0}
+        for t, m in [("Epic", prog["Epic"]), ("Feature", prog["Feature"]),
+                     ("User Story", prog["User Story"]), ("Task", prog["Task"])]
+    ])
+    st.dataframe(prog_df, use_container_width=True, hide_index=True)
+    hier_txt = "child→parent roll-up active ✅" if prog["hierarchy_used"] else "own-state (add Parent ID for roll-up)"
+    st.caption(f"Hierarchy: {hier_txt}")
+
+    st.subheader("Work by state")
+    state_df = pd.DataFrame([
+        {"State": s, "Items": n} for s, n in Counter(i["state"] for i in dev).most_common()
+    ])
+    col_l, col_r = st.columns([1, 1])
+    with col_l:
+        st.bar_chart(state_df.set_index("State"))
+    with col_r:
+        st.dataframe(state_df, use_container_width=True, hide_index=True)
+
+
+# ============================================================ SPRINT SUMMARY
+def sprint_summary_df():
+    groups = defaultdict(list)
+    for i in dev:
+        groups[i["sprint"]].append(i)
+    rows = []
+    for sprint in sorted(groups, key=lambda s: (s == PB, s)):
+        m = groups[sprint]
+        scg = scope_metrics(m)
+        im = item_metrics(m)
+        rows.append({
+            "Iteration": sprint,
+            "Total Dev Items": len(m),
+            "User Stories": scg["stories"],
+            "Stories Done": scg["stories_done"],
+            "Scope Done %": scg["scope_pct"] or 0,
+            "Tasks": scg["tasks"],
+            "Tasks Done": scg["tasks_done"],
+            "Task Done %": scg["task_pct"] or 0,
+            "Active": im["active"],
+            "Unassigned": im["unassigned"],
+            f"Open ≥{STALE_DAYS}d": im["stale"],
+            "Iteration Meaning": "No sprint assigned" if sprint == PB else "Committed iteration",
+        })
+    return pd.DataFrame(rows)
+
+
+def render_sprint_summary():
+    st.header("📅 Sprint Summary")
+    st.caption("One row per real Azure iteration; Product Backlog shown separately.")
+    st.dataframe(sprint_summary_df(), use_container_width=True, hide_index=True)
+
+
+# ============================================================ SPRINT BOARD
+def render_sprint_board():
+    st.header("📋 Sprint Board")
+    st.caption("Every dev work item grouped by iteration and assignee, with Azure links.")
+    df = pd.DataFrame([{
+        "Iteration": i["sprint"], "ID": i["id"], "Title": i["title"], "Type": i["type"],
+        "State": i["state"], "Assignee": i["assignee"], "Area": i["area"],
+        "Tags": "; ".join(i["tags"]) or "Untagged", "SP": i["sp"],
+        "Priority": i["priority"],
+        "Created": i["created"], "Changed": i["changed"],
+        "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
+        "Parent ID": i["parent"], "Azure Link": i["url"],
+    } for i in dev])
+    st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+
+
+# ============================================================ TAG ANALYSIS
+def render_tag_analysis():
+    st.header("🏷️ Tag Analysis")
+    st.caption("Multi-tag items counted once per tag; Untagged shown explicitly.")
+    tag_map = defaultdict(list)
+    for i in dev:
+        for t in (i["tags"] or ["Untagged"]):
+            tag_map[t].append(i)
+    rows = []
+    for tag, members in sorted(tag_map.items(), key=lambda x: -len(x[1])):
+        sc = scope_metrics(members)
+        im = item_metrics(members)
+        rows.append({
+            "Tag": tag, "Items": len(members),
+            "Stories": sc["stories"], "Stories Done": sc["stories_done"],
+            "Scope %": sc["scope_pct"] or 0,
+            "Tasks": sc["tasks"], "Tasks Done": sc["tasks_done"],
+            "Task %": sc["task_pct"] or 0,
+            "Active": im["active"], "Unassigned": im["unassigned"],
+            f"Open ≥{STALE_DAYS}d": im["stale"],
+            "Areas": ", ".join(sorted({i["area"] for i in members})),
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+# ============================================================ TEAM ANALYSIS
+def team_df():
+    assignee_of_story = defaultdict(set)
+    story_by_id = {i["id"]: i for i in dev if i["type"] == "User Story"}
+    for i in dev:
+        if i["type"] == "Task" and i["parent"] in story_by_id:
+            assignee_of_story[i["parent"]].add(i["assignee"])
+    groups = defaultdict(list)
+    for i in dev:
+        groups[i["assignee"]].append(i)
+    rows = []
+    for assignee, members in sorted(groups.items(), key=lambda x: -sum(1 for i in x[1] if i["type"] == "Task")):
+        tasks = [i for i in members if i["type"] == "Task"]
+        done_t = sum(is_done(t) for t in tasks)
+        involved = {i["id"] for i in members if i["type"] == "User Story"}
+        for sid, asg in assignee_of_story.items():
+            if assignee in asg:
+                involved.add(sid)
+        full = {sid for sid in involved if story_by_id.get(sid) and is_done(story_by_id[sid])}
+        rows.append({
+            "Assignee": assignee,
+            "Tasks": len(tasks), "Tasks Done": done_t,
+            "Task %": done_t / len(tasks) if tasks else None,
+            "Active": sum(i["state"] in ACTIVE for i in members),
+            "Open": sum(not is_done(i) for i in members),
+            f"Open ≥{STALE_DAYS}d": item_metrics(members)["stale"],
+            "Stories Involved": len(involved), "Stories Fully Done": len(full),
+            "Areas": ", ".join(sorted({i["area"] for i in members})),
+        })
+    return pd.DataFrame(rows)
+
+
+def render_team_analysis():
+    st.header("👥 Team Delivery (task-centric)")
+    st.caption("A story is rarely owned by one person; members are credited through Tasks they completed.")
+    st.dataframe(team_df(), use_container_width=True, hide_index=True)
+
+
+# ============================================================ AREA ANALYSIS
+def area_df():
+    rows = []
+    for area in sorted({i["area"] for i in dev}, key=lambda a: -sum(1 for i in dev if i["area"] == a)):
+        members = [i for i in dev if i["area"] == area]
+        sc = scope_metrics(members)
+        im = item_metrics(members)
+        rows.append({
+            "Area": area, "Total": len(members),
+            "Stories": sc["stories"], "Stories Done": sc["stories_done"],
+            "Scope %": sc["scope_pct"] or 0,
+            "Tasks": sc["tasks"], "Tasks Done": sc["tasks_done"],
+            "Task %": sc["task_pct"] or 0,
+            "SP": sc["total_sp"], "Done SP": sc["done_sp"],
+            "Active": im["active"], "Unassigned": im["unassigned"],
+            f"Open ≥{STALE_DAYS}d": im["stale"],
+        })
+    return pd.DataFrame(rows)
+
+
+def render_area_analysis():
+    st.header("🗂️ Area Analysis")
+    st.caption("Scope & execution split across Azure Area Paths.")
+    st.dataframe(area_df(), use_container_width=True, hide_index=True)
+
+
+# ============================================================ ACTIVE NOW
+def render_active_now():
+    st.header("⚡ Active & Open Work — Touch This Now")
+    st.caption("Everything open, ordered by risk (unassigned > active > aging).")
+    open_items = [i for i in dev if not is_done(i)]
+    def priority(item):
+        if item["assignee"] == "Unassigned":
+            return "Critical"
+        if item["state"] in ACTIVE:
+            return "Doing"
+        if item["created"] and (dt.date.today() - item["created"]).days >= STALE_DAYS:
+            return "Aging"
+        if item["type"] == "User Story":
+            return "Scope"
+        return "High"
+    rows = []
+    for i in sorted(open_items, key=lambda x: priority(x)):
+        rows.append({
+            "Priority": priority(i), "ID": i["id"], "Title": i["title"], "Type": i["type"],
+            "State": i["state"], "Assignee": i["assignee"], "Sprint": i["sprint"],
+            "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
+            "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
+            "Azure Link": i["url"],
+        })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=500)
+    else:
+        st.success("No open work — all done!")
+
+
+# ============================================================ RISKS & AGING
+def render_risks():
+    st.header("⚠️ Risks & Aging")
+    st.caption("Open work ranked by age; age = days since Created Date.")
+    open_items = [i for i in dev if not is_done(i)]
+    ordered = sorted(open_items, key=lambda i: (i["assignee"] != "Unassigned",
+                                                -(i["created"] and (dt.date.today() - i["created"]).days or -1),
+                                                i["id"]))
+    rows = []
+    for i in ordered:
+        risk = []
+        if i["assignee"] == "Unassigned":
+            risk.append("Unassigned")
+        if i["sprint"] == PB:
+            risk.append("No sprint")
+        if i["created"] and (dt.date.today() - i["created"]).days >= STALE_DAYS:
+            risk.append(f"Age ≥{STALE_DAYS}d")
+        if i["type"] == "User Story" and i["sp"] is None:
+            risk.append("No SP")
+        age = (dt.date.today() - i["created"]).days if i["created"] else None
+        rows.append({
+            "Risk": ", ".join(risk) or "Monitor", "Age": age, "ID": i["id"], "Title": i["title"],
+            "Type": i["type"], "State": i["state"], "Assignee": i["assignee"],
+            "Sprint": i["sprint"], "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
+            "Azure Link": i["url"],
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=500)
+
+
+# ============================================================ DATA QUALITY
+def render_data_quality():
+    st.header("🔍 Data Quality & Trust")
+    rows = [
+        ("All Azure work items imported", len(items), "Exact"),
+        ("Dev scope (Epic+Feature+Story+Task)", len(dev), "Exact"),
+        ("Test artifacts retained in Raw Data", len(items) - len(dev), "Excluded from delivery scope"),
+        ("Items in real sprint paths", sum(1 for i in dev if i["sprint"] != PB), "Exact"),
+        ("Product Backlog (no sprint)", sum(1 for i in dev if i["sprint"] == PB), "Exact"),
+        ("Items without assignee", all_m["unassigned"], "Exact"),
+        ("Items without tags", sum(1 for i in dev if not i["tags"]), "Exact"),
+        ("User Stories without Story Points", sum(1 for i in dev if i["type"] == "User Story" and i["sp"] is None), "Exact"),
+        ("Items with Parent ID", sum(1 for i in dev if i["parent"] is not None), "Enables hierarchy roll-up"),
+    ]
+    st.dataframe(pd.DataFrame(rows, columns=["Check", "Count", "Interpretation"]),
+                 use_container_width=True, hide_index=True)
+
+
+# ---- dispatch
+if page == "Executive Dashboard":
+    render_executive()
+elif page == "Sprint Summary":
+    render_sprint_summary()
+elif page == "Sprint Board":
+    render_sprint_board()
+elif page == "Tag Analysis":
+    render_tag_analysis()
+elif page == "Team Analysis":
+    render_team_analysis()
+elif page == "Area Analysis":
+    render_area_analysis()
+elif page == "Active Now":
+    render_active_now()
+elif page == "Risks & Aging":
+    render_risks()
+elif page == "Data Quality":
+    render_data_quality()
