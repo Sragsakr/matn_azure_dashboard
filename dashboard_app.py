@@ -219,7 +219,12 @@ def item_metrics(items):
         "done": done,
         "active": active,
         "open": total - done,
-        "unassigned": sum(i["assignee"] == "Unassigned" for i in items),
+        # User Stories are intentionally shared across task owners; only an
+        # unassigned Task is an actionable ownership risk.
+        "unassigned": sum(
+            i["type"] == "Task" and i["assignee"] == "Unassigned"
+            for i in items
+        ),
         "stale": sum(not is_done(i) and i["created"] and (dt.date.today() - i["created"]).days >= STALE_DAYS for i in items),
         "done_pct": done / total if total else 0,
     }
@@ -233,17 +238,26 @@ def type_progress(items):
             children[i["parent"]].append(i)
     hier = any(i["parent"] is not None for i in items)
 
-    mem = {}
+    memo = {}
+    visiting = set()
+
     def effective(item):
-        if item["id"] in mem:
-            return mem[item["id"]]
-        res = is_done(item)
-        for ch in children.get(item["id"], []):
-            if not effective(ch):
-                res = False
-                break
-        mem[item["id"]] = res
-        return res
+        item_id = item["id"]
+        if item_id in memo:
+            return memo[item_id]
+        if item_id in visiting:
+            # Malformed Azure hierarchy cycle: do not count it as complete.
+            return False
+        visiting.add(item_id)
+        child_items = children.get(item_id, [])
+        result = (
+            all(effective(child) for child in child_items)
+            if child_items
+            else is_done(item)
+        )
+        visiting.remove(item_id)
+        memo[item_id] = result
+        return result
 
     agg = defaultdict(lambda: {"total": 0, "done": 0})
     for t in ("Epic", "Feature", "User Story", "Task"):
@@ -269,24 +283,46 @@ def scope_metrics(items):
     for t in tasks:
         if t["parent"] is not None:
             tasks_by_parent[t["parent"]].append(t)
-    done_stories = 0
-    for s in stories:
-        if not is_done(s):
-            continue
-        kids = tasks_by_parent.get(s["id"])
-        if kids and hier:
-            if all(is_done(k) for k in kids):
-                done_stories += 1
-        else:
-            done_stories += 1
+    done_story_items = []
+    for story in stories:
+        child_tasks = tasks_by_parent.get(story["id"])
+        # A parent with children rolls up from them. A story without linked
+        # children falls back to its own Azure state.
+        story_done = (
+            all(is_done(task) for task in child_tasks)
+            if child_tasks and hier
+            else is_done(story)
+        )
+        if story_done:
+            done_story_items.append(story)
+
+    task_done_count = sum(is_done(task) for task in tasks)
+    total_sp = sum(float(story["sp"] or 0) for story in stories)
+    done_sp = sum(float(story["sp"] or 0) for story in done_story_items)
     return {
         "stories": len(stories),
-        "stories_done": done_stories,
-        "scope_pct": done_stories / len(stories) if stories else None,
+        "stories_done": len(done_story_items),
+        "scope_pct": len(done_story_items) / len(stories) if stories else None,
         "tasks": len(tasks),
-        "tasks_done": sum(is_done(t) for t in tasks),
-        "task_pct": (sum(is_done(t) for t in tasks) / len(tasks)) if tasks else None,
+        "tasks_done": task_done_count,
+        "task_pct": task_done_count / len(tasks) if tasks else None,
+        "total_sp": total_sp,
+        "done_sp": done_sp,
+        "velocity_pct": done_sp / total_sp if total_sp else None,
         "hier": hier,
+    }
+
+
+def percent(value):
+    """Convert a 0..1 ratio to a display-ready numeric percentage."""
+    return round(value * 100, 1) if value is not None else None
+
+
+def percentage_columns(*names):
+    """Streamlit table formatting for numeric 0..100 percentage columns."""
+    return {
+        name: st.column_config.NumberColumn(name, format="%.1f%%")
+        for name in names
     }
 
 
@@ -324,14 +360,45 @@ def apply_theme():
     st.markdown(
         """
         <style>
-        .block-container { padding-top: 1.2rem; }
-        div[data-testid="stSidebar"] { background: #F4F6FB; }
-        div[data-testid="stMetric"] {
-            background: white; border: 1px solid #E2E8F0; border-radius: 12px;
-            padding: 12px 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        :root { --navy:#111827; --blue:#2563EB; --ink:#0F172A; --muted:#64748B; }
+        .stApp { background: #F3F6FB; }
+        .block-container { max-width: 1500px; padding: 1.4rem 2.2rem 3rem; }
+        h1 { color: var(--ink); font-size: 2rem !important; letter-spacing: -.03em; }
+        h2 { color: var(--ink); font-size: 1.45rem !important; margin-top: .2rem; }
+        h3 { color: #334155; font-size: 1.05rem !important; }
+        p, .stCaption { color: var(--muted); }
+
+        div[data-testid="stSidebar"] { background: var(--navy); border-right: 0; }
+        div[data-testid="stSidebar"] * { color: #E5E7EB; }
+        div[data-testid="stSidebar"] [data-testid="stMetric"] {
+            background: #1F2937; border-color: #374151; box-shadow: none;
         }
-        div[data-testid="stMetric"] label { color: #64748B; font-weight:600; }
-        div[data-testid="stMetric"] [data-testid="stMetricValue"] { font-weight:700; }
+        div[data-testid="stSidebar"] [data-testid="stMetricValue"] { color: #FFF; }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label {
+            padding: .45rem .65rem; border-radius: 8px; margin-bottom: 2px;
+        }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label:hover { background:#1F2937; }
+        div[data-testid="stSidebar"] button[kind="primary"] {
+            width:100%; border:0; border-radius:9px; background:#2563EB;
+            box-shadow:0 6px 16px rgba(37,99,235,.35); font-weight:700;
+        }
+
+        div[data-testid="stMetric"] {
+            background:#FFF; border:1px solid #E2E8F0; border-radius:14px;
+            padding:15px 14px; box-shadow:0 4px 14px rgba(15,23,42,.055);
+            min-height:112px;
+        }
+        div[data-testid="stMetric"] label { color:var(--muted); font-weight:650; }
+        div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+            color:var(--ink); font-weight:800; letter-spacing:-.03em;
+        }
+        div[data-testid="stDataFrame"] {
+            background:#FFF; border:1px solid #E2E8F0; border-radius:14px;
+            overflow:hidden; box-shadow:0 3px 12px rgba(15,23,42,.045);
+        }
+        div[data-testid="stAlert"] { border-radius:12px; }
+        hr { border-color:#E2E8F0; margin:.8rem 0 1.1rem; }
+        #MainMenu, footer { visibility:hidden; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -440,11 +507,14 @@ def render_executive():
 
     st.subheader("Completion by work type")
     prog_df = pd.DataFrame([
-        {"Work Type": t, "Total": m["total"], "Done": m["done"], "Completion %": m["pct"] or 0}
+        {"Work Type": t, "Total": m["total"], "Done": m["done"], "Completion %": percent(m["pct"])}
         for t, m in [("Epic", prog["Epic"]), ("Feature", prog["Feature"]),
                      ("User Story", prog["User Story"]), ("Task", prog["Task"])]
     ])
-    st.dataframe(prog_df, use_container_width=True, hide_index=True)
+    st.dataframe(
+        prog_df, width="stretch", hide_index=True,
+        column_config=percentage_columns("Completion %"),
+    )
     hier_txt = "child→parent roll-up active ✅" if prog["hierarchy_used"] else "own-state (add Parent ID for roll-up)"
     st.caption(f"Hierarchy: {hier_txt}")
 
@@ -456,7 +526,7 @@ def render_executive():
     with col_l:
         st.bar_chart(state_df.set_index("State"))
     with col_r:
-        st.dataframe(state_df, use_container_width=True, hide_index=True)
+        st.dataframe(state_df, width="stretch", hide_index=True)
 
 
 # ============================================================ SPRINT SUMMARY
@@ -474,10 +544,10 @@ def sprint_summary_df():
             "Total Dev Items": len(m),
             "User Stories": scg["stories"],
             "Stories Done": scg["stories_done"],
-            "Scope Done %": scg["scope_pct"] or 0,
+            "Scope Done %": percent(scg["scope_pct"]),
             "Tasks": scg["tasks"],
             "Tasks Done": scg["tasks_done"],
-            "Task Done %": scg["task_pct"] or 0,
+            "Task Done %": percent(scg["task_pct"]),
             "Active": im["active"],
             "Unassigned": im["unassigned"],
             f"Open ≥{STALE_DAYS}d": im["stale"],
@@ -489,7 +559,10 @@ def sprint_summary_df():
 def render_sprint_summary():
     st.header("📅 Sprint Summary")
     st.caption("One row per real Azure iteration; Product Backlog shown separately.")
-    st.dataframe(sprint_summary_df(), use_container_width=True, hide_index=True)
+    st.dataframe(
+        sprint_summary_df(), width="stretch", hide_index=True,
+        column_config=percentage_columns("Scope Done %", "Task Done %"),
+    )
 
 
 # ============================================================ SPRINT BOARD
@@ -505,7 +578,7 @@ def render_sprint_board():
         "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
         "Parent ID": i["parent"], "Azure Link": i["url"],
     } for i in dev])
-    st.dataframe(df, use_container_width=True, hide_index=True, height=500)
+    st.dataframe(df, width="stretch", hide_index=True, height=500)
 
 
 # ============================================================ TAG ANALYSIS
@@ -523,44 +596,56 @@ def render_tag_analysis():
         rows.append({
             "Tag": tag, "Items": len(members),
             "Stories": sc["stories"], "Stories Done": sc["stories_done"],
-            "Scope %": sc["scope_pct"] or 0,
+            "Scope %": percent(sc["scope_pct"]),
             "Tasks": sc["tasks"], "Tasks Done": sc["tasks_done"],
-            "Task %": sc["task_pct"] or 0,
+            "Task %": percent(sc["task_pct"]),
             "Active": im["active"], "Unassigned": im["unassigned"],
             f"Open ≥{STALE_DAYS}d": im["stale"],
             "Areas": ", ".join(sorted({i["area"] for i in members})),
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(
+        pd.DataFrame(rows), width="stretch", hide_index=True,
+        column_config=percentage_columns("Scope %", "Task %"),
+    )
 
 
 # ============================================================ TEAM ANALYSIS
 def team_df():
-    assignee_of_story = defaultdict(set)
-    story_by_id = {i["id"]: i for i in dev if i["type"] == "User Story"}
-    for i in dev:
-        if i["type"] == "Task" and i["parent"] in story_by_id:
-            assignee_of_story[i["parent"]].add(i["assignee"])
-    groups = defaultdict(list)
-    for i in dev:
-        groups[i["assignee"]].append(i)
+    """Task-only ownership metrics; stories are shared through child Tasks."""
+    tasks = [item for item in dev if item["type"] == "Task"]
+    tasks_by_assignee = defaultdict(list)
+    tasks_by_story = defaultdict(list)
+    for task in tasks:
+        tasks_by_assignee[task["assignee"]].append(task)
+        if task["parent"] is not None:
+            tasks_by_story[task["parent"]].append(task)
+
+    completed_story_ids = {
+        story_id
+        for story_id, child_tasks in tasks_by_story.items()
+        if child_tasks and all(is_done(task) for task in child_tasks)
+    }
+
     rows = []
-    for assignee, members in sorted(groups.items(), key=lambda x: -sum(1 for i in x[1] if i["type"] == "Task")):
-        tasks = [i for i in members if i["type"] == "Task"]
-        done_t = sum(is_done(t) for t in tasks)
-        involved = {i["id"] for i in members if i["type"] == "User Story"}
-        for sid, asg in assignee_of_story.items():
-            if assignee in asg:
-                involved.add(sid)
-        full = {sid for sid in involved if story_by_id.get(sid) and is_done(story_by_id[sid])}
+    ordered_groups = sorted(
+        tasks_by_assignee.items(), key=lambda group: (-len(group[1]), group[0])
+    )
+    for assignee, owned_tasks in ordered_groups:
+        done_count = sum(is_done(task) for task in owned_tasks)
+        involved_story_ids = {
+            task["parent"] for task in owned_tasks if task["parent"] is not None
+        }
         rows.append({
             "Assignee": assignee,
-            "Tasks": len(tasks), "Tasks Done": done_t,
-            "Task %": done_t / len(tasks) if tasks else None,
-            "Active": sum(i["state"] in ACTIVE for i in members),
-            "Open": sum(not is_done(i) for i in members),
-            f"Open ≥{STALE_DAYS}d": item_metrics(members)["stale"],
-            "Stories Involved": len(involved), "Stories Fully Done": len(full),
-            "Areas": ", ".join(sorted({i["area"] for i in members})),
+            "Tasks": len(owned_tasks),
+            "Tasks Done": done_count,
+            "Task Completion %": percent(done_count / len(owned_tasks)),
+            "Active": sum(task["state"] in ACTIVE for task in owned_tasks),
+            "Open": sum(not is_done(task) for task in owned_tasks),
+            f"Open ≥{STALE_DAYS}d": item_metrics(owned_tasks)["stale"],
+            "Stories Involved": len(involved_story_ids),
+            "Stories Fully Done": len(involved_story_ids & completed_story_ids),
+            "Areas": ", ".join(sorted({task["area"] for task in owned_tasks})),
         })
     return pd.DataFrame(rows)
 
@@ -568,7 +653,10 @@ def team_df():
 def render_team_analysis():
     st.header("👥 Team Delivery (task-centric)")
     st.caption("A story is rarely owned by one person; members are credited through Tasks they completed.")
-    st.dataframe(team_df(), use_container_width=True, hide_index=True)
+    st.dataframe(
+        team_df(), width="stretch", hide_index=True,
+        column_config=percentage_columns("Task Completion %"),
+    )
 
 
 # ============================================================ AREA ANALYSIS
@@ -581,9 +669,9 @@ def area_df():
         rows.append({
             "Area": area, "Total": len(members),
             "Stories": sc["stories"], "Stories Done": sc["stories_done"],
-            "Scope %": sc["scope_pct"] or 0,
+            "Scope %": percent(sc["scope_pct"]),
             "Tasks": sc["tasks"], "Tasks Done": sc["tasks_done"],
-            "Task %": sc["task_pct"] or 0,
+            "Task %": percent(sc["task_pct"]),
             "SP": sc["total_sp"], "Done SP": sc["done_sp"],
             "Active": im["active"], "Unassigned": im["unassigned"],
             f"Open ≥{STALE_DAYS}d": im["stale"],
@@ -594,7 +682,10 @@ def area_df():
 def render_area_analysis():
     st.header("🗂️ Area Analysis")
     st.caption("Scope & execution split across Azure Area Paths.")
-    st.dataframe(area_df(), use_container_width=True, hide_index=True)
+    st.dataframe(
+        area_df(), width="stretch", hide_index=True,
+        column_config=percentage_columns("Scope %", "Task %"),
+    )
 
 
 # ============================================================ ACTIVE NOW
@@ -622,7 +713,7 @@ def render_active_now():
             "Azure Link": i["url"],
         })
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=500)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=500)
     else:
         st.success("No open work — all done!")
 
@@ -653,7 +744,7 @@ def render_risks():
             "Sprint": i["sprint"], "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
             "Azure Link": i["url"],
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=500)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=500)
 
 
 # ============================================================ DATA QUALITY
@@ -671,7 +762,7 @@ def render_data_quality():
         ("Items with Parent ID", sum(1 for i in dev if i["parent"] is not None), "Enables hierarchy roll-up"),
     ]
     st.dataframe(pd.DataFrame(rows, columns=["Check", "Count", "Interpretation"]),
-                 use_container_width=True, hide_index=True)
+                 width="stretch", hide_index=True)
 
 
 # ============================================================ RELEASES
@@ -684,7 +775,7 @@ def render_releases():
         "Platform": "", "Target Date": None, "Actual Date": None,
         "Status": "", "Owner": "", "Release Notes": "Connect Azure Pipelines/Delivery Plans or a Target-Date field to populate.",
     }]
-    st.dataframe(pd.DataFrame(release_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(release_rows), width="stretch", hide_index=True)
     st.info("Release dates are not present in the work-item API pull. "
             "Add a dedicated Azure field (Target Date) or connect Pipelines to auto-populate this tab.")
 
@@ -702,7 +793,7 @@ def render_raw_data():
         "Tags": "; ".join(i["tags"]) or "Untagged", "Parent ID": i["parent"], "Azure Link": i["url"],
     } for i in all_items])
     if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True, height=520)
+        st.dataframe(df, width="stretch", hide_index=True, height=520)
     else:
         st.info("No raw data loaded. Press Refresh (requires AZDO_PAT) or supply the workbook.")
 
