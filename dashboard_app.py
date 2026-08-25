@@ -18,9 +18,12 @@ from urllib.parse import quote
 import openpyxl
 import pandas as pd
 import requests
+import altair as alt
 import streamlit as st
 
+import dashboard_theme
 from azure_repo_activity import AzureRepoActivityClient, contributor_rows
+from dashboard_styles import apply_theme, section_header
 
 # ---------------------------------------------------------------- constants
 ORG = "matnsolutions"
@@ -486,94 +489,9 @@ def tr(english, arabic):
     return arabic if is_ar else english
 
 
-def apply_theme(arabic):
-    direction = "rtl" if arabic else "ltr"
-    align = "right" if arabic else "left"
-    css = """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap');
-        :root { --brand:#2563EB; --brand-soft:#EFF6FF; --ink:#111827; --muted:#6B7280; --line:#E5E7EB; }
-        html, body, [class*="css"] { font-family:'Inter','Noto Sans Arabic','Segoe UI',sans-serif; }
-        .stApp { background:#F8FAFC; direction:__DIR__; }
-        .block-container { max-width:1480px; padding:1.1rem 2rem 3rem; }
-        h1, h2, h3 { color:var(--ink); letter-spacing:-.02em; text-align:__ALIGN__; }
-        h2 { font-size:1.45rem !important; margin-top:.3rem; }
-        h3 { font-size:1.05rem !important; }
-        p, .stCaption { color:var(--muted); }
-
-        .enterprise-header { display:flex; align-items:center; justify-content:space-between; gap:1rem;
-            background:#FFF; border:1px solid var(--line); border-radius:14px; padding:1rem 1.25rem;
-            margin:0 0 1.25rem; box-shadow:0 2px 5px rgba(15,23,42,.04); }
-        .enterprise-header h1 { margin:.12rem 0 0; font-size:1.32rem !important; font-weight:800; }
-        .header-kicker { color:#9CA3AF; font-size:.66rem; font-weight:800; letter-spacing:.14em; }
-        .azure-pill { display:inline-flex; align-items:center; gap:.45rem; border:1px solid #BFDBFE;
-            background:#EFF6FF; color:#1D4ED8; border-radius:9px; padding:.5rem .7rem;
-            font-size:.75rem; font-weight:700; white-space:nowrap; }
-        .azure-dot { width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px #D1FAE5; }
-
-        div[data-testid="stSidebar"] { background:#FFF; border-inline-end:1px solid var(--line); }
-        div[data-testid="stSidebar"] > div:first-child { padding-top:1rem; }
-        div[data-testid="stSidebar"] * { text-align:__ALIGN__; }
-        .sidebar-brand { display:flex; align-items:center; gap:.72rem; padding:.15rem .15rem 1rem;
-            margin-bottom:.65rem; border-bottom:1px solid #F1F5F9; }
-        .brand-mark { display:grid; place-items:center; width:39px; height:39px; border-radius:10px;
-            background:#2563EB; color:#FFF; font-size:1rem; font-weight:900;
-            box-shadow:0 5px 12px rgba(37,99,235,.22); }
-        .sidebar-brand strong { display:block; color:#1F2937; font-size:.88rem; letter-spacing:.035em; }
-        .sidebar-brand span { display:block; color:#9CA3AF; font-size:.7rem; margin-top:.06rem; }
-        .sidebar-label { color:#9CA3AF !important; font-size:.64rem; font-weight:800;
-            letter-spacing:.12em; margin:1rem .65rem .4rem; }
-        div[data-testid="stSidebar"] div[role="radiogroup"] { gap:.12rem; }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label {
-            padding:.58rem .72rem; border:1px solid transparent; border-radius:10px;
-            margin-bottom:1px; transition:all .16s ease;
-        }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label p { color:#4B5563; font-size:.84rem; }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label:hover { background:#F3F4F6; }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
-            background:#EFF6FF; border-color:#DBEAFE; box-shadow:0 1px 2px rgba(37,99,235,.05);
-        }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {
-            color:#1D4ED8 !important; font-weight:700;
-        }
-        div[data-testid="stSidebar"] button[kind="primary"] {
-            width:100%; border:0; border-radius:9px; background:#2563EB;
-            box-shadow:0 4px 10px rgba(37,99,235,.2); font-weight:700;
-        }
-        div[data-testid="stSidebar"] [data-testid="stMetric"] {
-            background:#F9FAFB; border:1px solid #E5E7EB; box-shadow:none;
-            min-height:70px; padding:8px 10px; border-radius:10px;
-        }
-        div[data-testid="stSidebar"] [data-testid="stMetricLabel"] p { color:#9CA3AF !important; font-size:.68rem; }
-        div[data-testid="stSidebar"] [data-testid="stMetricValue"] { color:#111827; font-size:1.05rem; }
-        div[data-testid="stSidebar"] [data-baseweb="button-group"] { width:100%; }
-
-        .kpi-card { min-height:128px; background:#FFF; border:1px solid #E5E7EB;
-            border-top:3px solid var(--accent); border-radius:14px; padding:1rem;
-            box-shadow:0 4px 7px -3px rgba(15,23,42,.08); transition:transform .18s ease,box-shadow .18s ease; }
-        .kpi-card:hover { transform:translateY(-2px); box-shadow:0 8px 18px -8px rgba(15,23,42,.18); }
-        .kpi-card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:.4rem; }
-        .kpi-label { color:#6B7280; font-size:.66rem; font-weight:800; letter-spacing:.075em; text-transform:uppercase; }
-        .kpi-icon { display:grid; place-items:center; width:29px; height:29px; border-radius:8px;
-            background:color-mix(in srgb,var(--accent) 10%,white); color:var(--accent); font-size:.85rem; }
-        .kpi-value { color:var(--accent); font-size:1.72rem; line-height:1.1; font-weight:800; margin-top:1rem; }
-        .health-ribbon { border:1px solid color-mix(in srgb,var(--health) 20%,white);
-            border-inline-start:4px solid var(--health); background:color-mix(in srgb,var(--health) 7%,white);
-            color:#1F2937; padding:.82rem 1rem; border-radius:11px; font-size:.9rem; font-weight:700; margin-bottom:1rem; }
-        div[data-testid="stDataFrame"] { background:#FFF; border:1px solid #E5E7EB; border-radius:12px;
-            overflow:hidden; box-shadow:0 2px 5px rgba(15,23,42,.035); }
-        div[data-testid="stAlert"] { border-radius:10px; }
-        hr { border-color:#E5E7EB; margin:.8rem 0 1.1rem; }
-        #MainMenu, footer { visibility:hidden; }
-        @media (max-width:780px) {
-            .block-container { padding:.8rem 1rem 2rem; }
-            .enterprise-header { align-items:flex-start; }
-            .azure-pill { font-size:0; }
-            .azure-pill::after { content:'Azure'; font-size:.72rem; }
-        }
-        </style>
-    """.replace("__DIR__", direction).replace("__ALIGN__", align)
-    st.markdown(css, unsafe_allow_html=True)
+def theme_chart(chart):
+    """Apply the active Altair theme to a chart before rendering."""
+    return chart
 
 
 def kpi_card(column, label, value, accent):
@@ -587,6 +505,36 @@ def kpi_card(column, label, value, accent):
         )
 
 
+def localized_label(name):
+    return column_label(name)
+
+
+def weekly_creation_closure(delivery_items):
+    """Weekly created vs closed item counts from Azure dates."""
+    created = Counter()
+    closed = Counter()
+    for item in delivery_items:
+        if not item.get("created"):
+            continue
+        monday = item["created"] - dt.timedelta(days=item["created"].weekday())
+        created[monday] += 1
+        closure = item.get("changed") if is_done(item) else None
+        if closure:
+            closed_monday = closure - dt.timedelta(days=closure.weekday())
+            closed[closed_monday] += 1
+    weeks = sorted(set(created) | set(closed))
+    return pd.DataFrame([
+        {
+            "period": week.strftime("%d %b"),
+            "Created": created.get(week, 0),
+            "Closed": closed.get(week, 0),
+        }
+        for week in weeks[-12:]
+    ])
+
+
+
+
 # ---------------------------------------------------------------- rendering
 st.set_page_config(
     page_title="Delivery Manager — Hoteliana",
@@ -596,7 +544,14 @@ st.set_page_config(
 )
 
 is_ar = st.session_state.get("language_selector", "العربية") == "العربية"
-apply_theme(is_ar)
+theme_mode = "dark" if st.session_state.get("theme_selector", "Dark") == "Dark" else "light"
+apply_theme(theme_mode, is_ar)
+chart_theme = dashboard_theme.chart_theme(theme_mode)
+ACCENT = {
+    "green": "#10B981", "blue": "#3B82F6", "purple": "#8B5CF6",
+    "red": "#EF4444", "gold": "#CA8A04", "orange": "#F59E0B",
+    "teal": "#14B8A6", "pink": "#EC4899",
+}
 
 st.sidebar.markdown(
     """
@@ -612,6 +567,13 @@ st.sidebar.segmented_control(
     ["العربية", "English"],
     key="language_selector",
     default="العربية",
+    label_visibility="collapsed",
+)
+st.sidebar.segmented_control(
+    tr("Theme", "المظهر"),
+    ["Dark", "Light"],
+    key="theme_selector",
+    default="Dark",
     label_visibility="collapsed",
 )
 st.sidebar.markdown(
@@ -767,25 +729,48 @@ def render_executive():
         return
 
     columns = st.columns(6)
-    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", "#059669")
-    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", "#2563EB")
-    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], "#7C3AED")
-    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], "#DC2626")
+    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"])
+    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"])
+    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"])
+    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"])
     backlog_count = sum(1 for item in dev if item["sprint"] == PB)
-    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, "#CA8A04")
-    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], "#EA580C")
+    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"])
+    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["orange"])
 
-    st.subheader(tr("Completion by work type", "الاكتمال حسب نوع عنصر العمل"))
+    section_header(
+        "Completion by work type",
+        "الاكتمال حسب نوع عنصر العمل", "◈")
     prog_df = pd.DataFrame([
         {"Work Type": work_type, "Total": prog[work_type]["total"],
          "Done": prog[work_type]["done"],
          "Completion %": percent(prog[work_type]["pct"])}
         for work_type in DELIVERY_TYPES
     ])
-    st.dataframe(
-        localized_frame(prog_df), width="stretch", hide_index=True,
-        column_config=percentage_columns("Completion %"),
-    )
+    chart_col, table_col = st.columns([1.15, 1])
+    with chart_col:
+        type_colors = {
+            "Epic": ACCENT["purple"], "Feature": ACCENT["blue"],
+            "User Story": ACCENT["teal"], "Task": ACCENT["green"], "Bug": ACCENT["red"],
+        }
+        st.altair_chart(dashboard_theme.donut_chart(
+            prog_df.rename(columns={"Work Type": "kind", "Total": "total"}),
+            "kind", "total", chart_theme, colors=type_colors,
+        ), width="stretch")
+    with table_col:
+        st.dataframe(
+            localized_frame(prog_df), width="stretch", hide_index=True,
+            column_config={
+                **percentage_columns("Completion %"),
+                localized_label("Total"): st.column_config.ProgressColumn(
+                    localized_label("Total"), min_value=0,
+                    max_value=max(1, int(prog_df["Total"].max())),
+                ),
+                localized_label("Done"): st.column_config.ProgressColumn(
+                    localized_label("Done"), min_value=0,
+                    max_value=max(1, int(prog_df["Done"].max())),
+                ),
+            },
+        )
     hier_txt = tr(
         "child→parent roll-up active ✅",
         "تجميع نتائج الأبناء إلى العناصر الرئيسية مفعّل ✅",
@@ -795,24 +780,42 @@ def render_executive():
     )
     st.caption(tr(f"Hierarchy: {hier_txt}", f"التسلسل الهرمي: {hier_txt}"))
 
-    st.subheader(tr("Current board flow", "تدفق العمل الحالي"))
-    board_df = pd.DataFrame([
-        {"Board Column": column, "Items": count}
-        for column, count in Counter(i["board_column"] for i in dev).most_common()
-    ])
+    section_header("Current board flow", "تدفق العمل الحالي", "▦")
     state_df = pd.DataFrame([
         {"State": state, "Category": category, "Items": count}
         for (state, category), count in Counter(
             (i["state"], i["state_category"]) for i in dev
         ).most_common()
     ])
-    col_l, col_r = st.columns([1.2, 1])
-    with col_l:
-        st.caption(tr("Items by Azure Board column", "العناصر حسب عمود Azure Board"))
-        st.bar_chart(board_df.set_index("Board Column"))
-    with col_r:
+    category_colors = {
+        "Completed": ACCENT["green"], "InProgress": ACCENT["blue"],
+        "Resolved": ACCENT["teal"], "Proposed": ACCENT["gold"], "Removed": ACCENT["red"],
+    }
+    chart_col, table_col = st.columns([1.2, 1])
+    with chart_col:
+        st.caption(tr("Items by Azure Board column and category", "العناصر حسب عمود اللوحة والتصنيف"))
+        board_flow = pd.DataFrame([
+            {"column": column_name, "category": category, "items": count}
+            for (column_name, category), count in Counter(
+                (i["board_column"], i["state_category"]) for i in dev
+            ).most_common()
+        ])
+        st.altair_chart(dashboard_theme.stacked_hbar_chart(
+            board_flow, "column", "category", "items", chart_theme
+        ), width="stretch")
+    with table_col:
         st.caption(tr("Exact Azure states and canonical categories", "حالات Azure الفعلية وتصنيفاتها"))
         st.dataframe(localized_frame(state_df), width="stretch", hide_index=True)
+
+    section_header("Delivery momentum", "زخم التسليم", "⚡")
+    week_frame = weekly_creation_closure(dev)
+    if week_frame.empty:
+        st.info(tr("No dated items yet.", "لا توجد عناصر بتواريخ بعد."))
+    else:
+        st.altair_chart(dashboard_theme.area_trend_chart(
+            week_frame, "period", ("Closed", "Created"),
+            {"Closed": ACCENT["green"], "Created": ACCENT["blue"]}, chart_theme,
+        ), width="stretch")
 
 
 # ============================================================ SPRINT SUMMARY
@@ -845,10 +848,22 @@ def sprint_summary_df():
 def render_sprint_summary():
     st.header(tr("Sprint Summary", "ملخص السبرينت"))
     st.caption(tr("One row per Azure iteration; Product Backlog is shown separately.", "صف لكل دورة Azure مع عرض Product Backlog بشكل منفصل."))
-    st.dataframe(
-        localized_frame(sprint_summary_df()), width="stretch", hide_index=True,
-        column_config=percentage_columns("Scope Done %", "Task Done %"),
-    )
+    summary = sprint_summary_df()
+    chart_col, table_col = st.columns([1, 1.25])
+    with chart_col:
+        section_header("Stories done vs total", "القصص المكتملة مقابل الإجمالي", "◷")
+        story_chart = summary.rename(columns={
+            "Iteration": "iteration", "Stories Done": "done", "User Stories": "total",
+        })
+        st.altair_chart(dashboard_theme.grouped_hbar_chart(
+            story_chart, "iteration", ("done", "total"),
+            {"done": ACCENT["green"], "total": ACCENT["blue"]}, chart_theme,
+        ), width="stretch")
+    with table_col:
+        st.dataframe(
+            localized_frame(summary), width="stretch", hide_index=True,
+            column_config=percentage_columns("Scope Done %", "Task Done %"),
+        )
 
 
 # ============================================================ SPRINT BOARD
@@ -891,10 +906,22 @@ def render_tag_analysis():
             f"Open ≥{STALE_DAYS}d": im["stale"],
             "Areas": ", ".join(sorted({i["area"] for i in members})),
         })
-    st.dataframe(
-        localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True,
-        column_config=percentage_columns("Scope %", "Task %"),
-    )
+    tag_frame = pd.DataFrame(rows)
+    chart_col, table_col = st.columns([1, 1.3])
+    with chart_col:
+        section_header("Items per tag", "العناصر لكل وسم", "#")
+        if not tag_frame.empty:
+            tag_counts = tag_frame.rename(columns={"Tag": "tag", "Items": "items"})[
+                ["tag", "items"]
+            ]
+            st.altair_chart(dashboard_theme.hbar_chart(
+                tag_counts, "items", "tag", chart_theme, color=ACCENT["teal"],
+            ), width="stretch")
+    with table_col:
+        st.dataframe(
+            localized_frame(tag_frame), width="stretch", hide_index=True,
+            column_config=percentage_columns("Scope %", "Task %"),
+        )
 
 
 # ============================================================ TEAM ANALYSIS
@@ -941,10 +968,25 @@ def team_df():
 def render_team_analysis():
     st.header(tr("Team Delivery", "أداء الفريق"))
     st.caption(tr("Team contribution is measured through completed Tasks.", "تُقاس مساهمة أعضاء الفريق من خلال المهام المكتملة."))
-    st.dataframe(
-        localized_frame(team_df()), width="stretch", hide_index=True,
-        column_config=percentage_columns("Task Completion %"),
-    )
+    team = team_df()
+    if not team.empty:
+        chart_col, table_col = st.columns([1, 1.35])
+        with chart_col:
+            section_header("Tasks per member", "المهام لكل عضو", "◎")
+            member_load = team.rename(columns={"Assignee": "member", "Tasks": "tasks"})[
+                ["member", "tasks"]
+            ]
+            st.altair_chart(dashboard_theme.hbar_chart(
+                member_load, "tasks", "member", chart_theme,
+                color=ACCENT["purple"],
+            ), width="stretch")
+        with table_col:
+            st.dataframe(
+                localized_frame(team), width="stretch", hide_index=True,
+                column_config=percentage_columns("Task Completion %"),
+            )
+    else:
+        st.dataframe(localized_frame(team), width="stretch", hide_index=True)
 
 
 # ============================================================ AREA ANALYSIS
@@ -970,10 +1012,24 @@ def area_df():
 def render_area_analysis():
     st.header(tr("Area Analysis", "تحليل المجالات"))
     st.caption(tr("Scope and execution across Azure Area Paths.", "توزيع النطاق والتنفيذ حسب مسارات Azure."))
-    st.dataframe(
-        localized_frame(area_df()), width="stretch", hide_index=True,
-        column_config=percentage_columns("Scope %", "Task %"),
-    )
+    areas = area_df()
+    if not areas.empty:
+        chart_col, table_col = st.columns([1, 1.35])
+        with chart_col:
+            section_header("Delivery items per area", "عناصر التسليم لكل مجال", "◇")
+            area_load = areas.rename(columns={"Area": "area", "Total": "total"})[
+                ["area", "total"]
+            ]
+            st.altair_chart(dashboard_theme.hbar_chart(
+                area_load, "total", "area", chart_theme, color=ACCENT["gold"],
+            ), width="stretch")
+        with table_col:
+            st.dataframe(
+                localized_frame(areas), width="stretch", hide_index=True,
+                column_config=percentage_columns("Scope %", "Task %"),
+            )
+    else:
+        st.dataframe(localized_frame(areas), width="stretch", hide_index=True)
 
 
 # ============================================================ ACTIVE NOW
@@ -1172,20 +1228,45 @@ def _filtered_repository_activity(activity, filter_values):
 def _render_repository_kpis(activity):
     columns = st.columns(6)
     values = (
-        (tr("Repositories", "المستودعات"), len(activity["repositories"]), "#2563EB"),
-        (tr("Contributors", "المساهمون"), len(activity["contributors"]), "#7C3AED"),
-        ("Commits", len(activity["commits"]), "#059669"),
-        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), "#0D9488"),
-        ("Pull Requests", len(activity["pull_requests"]), "#CA8A04"),
-        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), "#DB2777"),
+        (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"]),
+        (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"]),
+        ("Commits", len(activity["commits"]), ACCENT["green"]),
+        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), ACCENT["teal"]),
+        ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"]),
+        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"]),
     )
     for column, (label, value, accent) in zip(columns, values):
         kpi_card(column, label, value, accent)
 
 
 def _render_repository_tables(activity, failures):
-    _activity_table("Repository inventory", "قائمة المستودعات", activity["repositories"])
-    _activity_table("Contributor summary", "ملخص المساهمين", activity["contributors"])
+    chart_col, table_col = st.columns([1, 1.3])
+    with chart_col:
+        section_header("Commits per contributor", "Commits لكل مساهم", "⌘")
+        if activity["contributors"]:
+            commit_load = [
+                {"member": row["Contributor"], "commits": row["Commits"]}
+                for row in activity["contributors"]
+            ]
+            st.altair_chart(dashboard_theme.hbar_chart(
+                pd.DataFrame(commit_load), "commits", "member",
+                chart_theme, color=ACCENT["blue"],
+            ), width="stretch")
+    with table_col:
+        _activity_table("Contributor summary", "ملخص المساهمين", activity["contributors"])
+    pr_status = Counter(row.get("Status", "") for row in activity["pull_requests"])
+    status_col, inventory_col = st.columns([1, 1.4])
+    with status_col:
+        section_header("Pull request outcomes", "نتائج Pull Requests", "⌥")
+        if pr_status:
+            st.altair_chart(dashboard_theme.donut_chart(
+                pd.DataFrame({"status": list(pr_status), "total": list(pr_status.values())}),
+                "status", "total", chart_theme,
+                colors={"completed": ACCENT["green"], "active": ACCENT["blue"],
+                        "abandoned": ACCENT["red"]},
+            ), width="stretch")
+    with inventory_col:
+        _activity_table("Repository inventory", "قائمة المستودعات", activity["repositories"])
     _activity_table("Complete commit history", "كل تاريخ Commits", activity["commits"], 520)
     _activity_table("Complete push history", "كل تاريخ عمليات الرفع", activity["pushes"], 480)
     _activity_table("All pull requests", "كل Pull Requests", activity["pull_requests"], 520)
