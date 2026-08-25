@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matn Delivery — Bold Visual</title>
+<style>
+:root{
+  --bg:#0B0E14; --surface:#141824; --surface2:#1B2030; --line:#262C3D;
+  --ink:#F5F6FA; --muted:#9AA3B8; --muted2:#6B7386;
+  --blue:#4C8DFF; --green:#22C58B; --amber:#FFB020; --red:#FF5C5C; --purple:#9B6BFF; --teal:#2DD4C8; --pink:#FF6FA5;
+  --radius:14px;
+}
+[data-mode="light"]{
+  --bg:#F3F4F8; --surface:#FFFFFF; --surface2:#F7F8FC; --line:#E4E6F0;
+  --ink:#12141D; --muted:#5B6072; --muted2:#8A8FA3;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:'Noto Sans Arabic','Segoe UI',sans-serif;
+  background:var(--bg); color:var(--ink);
+}
+.shell{display:flex; min-height:100vh;}
+.sidebar{
+  width:260px; flex:0 0 260px; background:var(--surface);
+  border-left:1px solid var(--line); padding:22px 16px; position:sticky; top:0; height:100vh; overflow-y:auto;
+}
+.brand{display:flex; align-items:center; gap:12px; padding:2px 6px 20px; margin-bottom:16px;}
+.brand-mark{
+  width:38px; height:38px; border-radius:11px; background:linear-gradient(135deg,var(--blue),var(--purple));
+  color:#fff; display:grid; place-items:center; font-weight:900; font-size:1rem;
+}
+.brand strong{display:block; font-size:.88rem; font-weight:800; letter-spacing:.01em;}
+.brand span{display:block; font-size:.7rem; color:var(--muted); margin-top:2px;}
+.nav-group{margin-bottom:18px;}
+.nav-label{font-size:.64rem; font-weight:800; color:var(--muted2); letter-spacing:.1em; text-transform:uppercase; margin:0 10px 8px;}
+.nav-item{
+  display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px;
+  font-size:.82rem; color:var(--muted); cursor:pointer; margin-bottom:3px; font-weight:600;
+}
+.nav-item:hover{background:var(--surface2);}
+.nav-item.active{background:linear-gradient(90deg, rgba(76,141,255,.22), rgba(155,107,255,.10)); color:var(--ink);}
+.nav-icon{width:18px; text-align:center; font-size:.9rem;}
+.main{flex:1; min-width:0; padding:24px 30px 60px;}
+.topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; gap:16px; flex-wrap:wrap;}
+.title-block h1{font-size:1.5rem; font-weight:900; margin-bottom:3px; letter-spacing:-.01em;}
+.title-block p{font-size:.82rem; color:var(--muted);}
+.topbar-actions{display:flex; align-items:center; gap:10px;}
+.pill{
+  display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); background:var(--surface2);
+  padding:8px 14px; border-radius:999px; font-size:.76rem; font-weight:700; color:var(--ink);
+}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px rgba(34,197,139,.2);}
+.btn{border:0; background:var(--surface2); color:var(--ink); padding:8px 14px; border-radius:10px; font-size:.76rem; font-weight:700; cursor:pointer; border:1px solid var(--line);}
+.btn.primary{background:linear-gradient(135deg,var(--blue),var(--purple)); color:#fff; border:none;}
+
+.status-banner{
+  display:flex; align-items:center; gap:12px; background:linear-gradient(90deg, rgba(255,176,32,.16), rgba(255,176,32,.03));
+  border:1px solid rgba(255,176,32,.35); padding:14px 18px; border-radius:var(--radius); margin-bottom:24px; font-size:.88rem; font-weight:700;
+}
+.badge-strong{
+  background:var(--amber); color:#3D2600; padding:4px 12px; border-radius:8px; font-size:.74rem; font-weight:900;
+}
+
+.section{margin-bottom:32px;}
+.section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px;}
+.section-head h2{font-size:1.02rem; font-weight:800;}
+.section-head span{font-size:.76rem; color:var(--muted);}
+
+.kpi-grid{display:grid; grid-template-columns:repeat(6, 1fr); gap:14px;}
+@media (max-width:1300px){.kpi-grid{grid-template-columns:repeat(3, 1fr);}}
+@media (max-width:640px){.kpi-grid{grid-template-columns:repeat(2, 1fr);}}
+.kpi{
+  position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px;
+}
+.kpi::before{content:""; position:absolute; inset-inline-start:0; top:0; width:100%; height:3px; background:var(--accent, var(--blue));}
+.kpi-icon{
+  width:30px; height:30px; border-radius:9px; display:grid; place-items:center; margin-bottom:12px;
+  background:color-mix(in srgb, var(--accent, var(--blue)) 18%, transparent); color:var(--accent, var(--blue)); font-size:.9rem; font-weight:800;
+}
+.kpi-label{font-size:.7rem; color:var(--muted); font-weight:700; margin-bottom:6px;}
+.kpi-value{font-size:1.7rem; font-weight:900; line-height:1;}
+.kpi-sub{font-size:.7rem; color:var(--muted2); margin-top:8px; font-weight:600;}
+
+.grid-2{display:grid; grid-template-columns:1.15fr 1fr; gap:18px;}
+@media (max-width:980px){.grid-2{grid-template-columns:1fr;}}
+.grid-2.chart-heavy{grid-template-columns:1.4fr 1fr;}
+@media (max-width:980px){.grid-2.chart-heavy{grid-template-columns:1fr;}}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px;}
+.card h3{font-size:.88rem; font-weight:800; margin-bottom:3px;}
+.card .hint{font-size:.74rem; color:var(--muted); margin-bottom:14px;}
+.chart-wrap{position:relative; height:240px;}
+.chart-wrap.tall{height:290px;}
+
+table{width:100%; border-collapse:collapse; font-size:.82rem;}
+thead th{
+  text-align:right; font-size:.68rem; font-weight:800; color:var(--muted); text-transform:uppercase;
+  letter-spacing:.04em; padding:0 10px 10px; border-bottom:1px solid var(--line);
+}
+tbody td{padding:11px 10px; border-bottom:1px solid var(--line); color:var(--ink);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--surface2);}
+.num{font-variant-numeric:tabular-nums; font-weight:700;}
+.name-cell{display:flex; align-items:center; gap:9px; min-width:0;}
+.avatar{
+  width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:.64rem; font-weight:800; color:#fff; flex:0 0 26px;
+}
+.name-txt{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pctpill{font-size:.72rem; padding:4px 10px; border-radius:999px; font-weight:800;}
+.pctpill.zero{background:rgba(255,92,92,.16); color:var(--red);}
+.pctpill.mid{background:rgba(255,176,32,.16); color:var(--amber);}
+.pctpill.high{background:rgba(34,197,139,.16); color:var(--green);}
+
+.theme-toggle{border:1px solid var(--line); background:var(--surface2); border-radius:999px; padding:8px 14px; font-size:.74rem; font-weight:700; cursor:pointer; color:var(--ink);}
+
+.hbars{display:flex; flex-direction:column; gap:12px; justify-content:center; height:100%;}
+.hbar-row{display:grid; grid-template-columns:130px 1fr 42px; align-items:center; gap:10px; font-size:.76rem;}
+.hbar-row .lbl{color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600;}
+.hbar-track{position:relative; height:18px; background:var(--surface2); border-radius:6px; overflow:hidden;}
+.hbar-fill{position:absolute; inset-inline-start:0; top:0; height:100%; border-radius:6px;}
+.hbar-fill.ghost{background:var(--line);}
+.hbar-row .val{text-align:left; font-variant-numeric:tabular-nums; font-weight:800; color:var(--ink);}
+
+.donut-wrap{display:flex; flex-direction:column; align-items:center; gap:16px;}
+.donut-center{font-size:.72rem; color:var(--muted); text-align:center;}
+.donut-center strong{display:block; font-size:1.35rem; color:var(--ink); font-weight:900;}
+
+.linechart{width:100%; height:auto;}
+.linechart .grid-line{stroke:var(--line); stroke-width:1;}
+.linechart .pt-label{font-size:9px; fill:var(--muted); font-weight:700;}
+
+.legend-row{display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:14px; justify-content:center;}
+.legend-item{display:flex; align-items:center; gap:6px; font-size:.74rem; color:var(--muted); font-weight:600;}
+.legend-dot{width:9px; height:9px; border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div><strong>MATN DELIVERY</strong><span>Hoteliana workspace</span></div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">نظرة عامة</div>
+      <div class="nav-item active"><span class="nav-icon">&#9670;</span>النظرة التنفيذية</div>
+      <div class="nav-item"><span class="nav-icon">&#9678;</span>ملخص السبرينت</div>
+      <div class="nav-item"><span class="nav-icon">&#9638;</span>لوحة السبرينت</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">التسليم والفريق</div>
+      <div class="nav-item"><span class="nav-icon">#</span>تحليل الوسوم</div>
+      <div class="nav-item"><span class="nav-icon">&#9678;</span>أداء الفريق</div>
+      <div class="nav-item"><span class="nav-icon">&#9671;</span>تحليل المجالات</div>
+      <div class="nav-item"><span class="nav-icon">&#9889;</span>العمل الحالي</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">الجودة والمخاطر</div>
+      <div class="nav-item"><span class="nav-icon">&#9650;</span>المخاطر والتقادم</div>
+      <div class="nav-item"><span class="nav-icon">&#10003;</span>جودة البيانات</div>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">البيانات والمستودعات</div>
+      <div class="nav-item"><span class="nav-icon">&#8984;</span>ذكاء المستودعات</div>
+      <div class="nav-item"><span class="nav-icon">&#127937;</span>الإصدارات</div>
+      <div class="nav-item"><span class="nav-icon">&#9638;</span>البيانات الخام</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="title-block">
+        <h1>مركز القيادة الاستراتيجي للتسليم</h1>
+        <p>مزامنة مباشرة مع matnsolutions/Hoteliana</p>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill"><span class="dot"></span>Azure DevOps</span>
+        <button class="theme-toggle" onclick="toggleTheme()">&#9680; المظهر</button>
+        <button class="btn primary">↻ مزامنة</button>
+      </div>
+    </div>
+
+    <div class="status-banner">
+      <span class="badge-strong">معرّض للخطر</span>
+      <span>يوجد 27 مهمة بدون مسؤول — ابدأ بتحديد المسؤولين</span>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>النظرة التنفيذية للتسليم</h2><span>311 عنصر تسليم من إجمالي 578</span></div>
+      <div class="kpi-grid">
+        <div class="kpi" style="--accent:var(--green)"><div class="kpi-icon">%</div><div class="kpi-label">نطاق القصص المكتمل</div><div class="kpi-value">0%</div><div class="kpi-sub">0 من 52 قصة</div></div>
+        <div class="kpi" style="--accent:var(--blue)"><div class="kpi-icon">✓</div><div class="kpi-label">اكتمال المهام</div><div class="kpi-value">49%</div><div class="kpi-sub">109 من 223 مهمة</div></div>
+        <div class="kpi" style="--accent:var(--purple)"><div class="kpi-icon">&#9889;</div><div class="kpi-label">قيد التنفيذ</div><div class="kpi-value">91</div><div class="kpi-sub">عنصر نشط الآن</div></div>
+        <div class="kpi" style="--accent:var(--red)"><div class="kpi-icon">!</div><div class="kpi-label">بدون مسؤول</div><div class="kpi-value">27</div><div class="kpi-sub">مهمة تحتاج تعيين</div></div>
+        <div class="kpi" style="--accent:var(--amber)"><div class="kpi-icon">&#9635;</div><div class="kpi-label">قائمة المنتج</div><div class="kpi-value">31</div><div class="kpi-sub">عنصر بدون سبرينت</div></div>
+        <div class="kpi" style="--accent:var(--teal)"><div class="kpi-icon">&#9201;</div><div class="kpi-label">متقادم ≥14 يوم</div><div class="kpi-value">0</div><div class="kpi-sub">لا يوجد تأخير</div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>الاكتمال حسب نوع عنصر العمل</h2><span>تجميع نتائج الأبناء إلى العناصر الرئيسية مفعّل</span></div>
+      <div class="grid-2 chart-heavy">
+        <div class="card">
+          <h3>الإجمالي مقابل المكتمل لكل نوع</h3>
+          <div class="hint">Epic · Feature · User Story · Task · Bug</div>
+          <div class="chart-wrap">
+            <div class="hbars">
+              <div class="hbar-row"><span class="lbl">Epic</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:0%; background:var(--blue)"></div></div><span class="val">8</span></div>
+              <div class="hbar-row"><span class="lbl">Feature</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:0%; background:var(--blue)"></div></div><span class="val">20</span></div>
+              <div class="hbar-row"><span class="lbl">User Story</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:0%; background:var(--blue)"></div></div><span class="val">52</span></div>
+              <div class="hbar-row"><span class="lbl">Task</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:49%; background:var(--blue)"></div></div><span class="val">223</span></div>
+              <div class="hbar-row"><span class="lbl">Bug</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:0%; background:var(--blue)"></div></div><span class="val">8</span></div>
+            </div>
+            <div class="legend-row">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--line)"></span>الإجمالي</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--blue)"></span>مكتمل</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>تفصيل الأرقام</h3>
+          <div class="hint">عدد خام (وليس نسبة) لكل عمود</div>
+          <table>
+            <thead><tr><th>نوع العنصر</th><th>الإجمالي</th><th>مكتمل</th><th>النسبة</th></tr></thead>
+            <tbody>
+              <tr><td>Epic</td><td class="num">8</td><td class="num">0</td><td><span class="pctpill zero">0%</span></td></tr>
+              <tr><td>Feature</td><td class="num">20</td><td class="num">0</td><td><span class="pctpill zero">0%</span></td></tr>
+              <tr><td>User Story</td><td class="num">52</td><td class="num">0</td><td><span class="pctpill zero">0%</span></td></tr>
+              <tr><td>Task</td><td class="num">223</td><td class="num">109</td><td><span class="pctpill mid">49%</span></td></tr>
+              <tr><td>Bug</td><td class="num">8</td><td class="num">0</td><td><span class="pctpill zero">0%</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>تدفق العمل الحالي وزخم التسليم</h2><span>حالات Azure الفعلية آخر 3 أسابيع</span></div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>العناصر حسب الحالة</h3>
+          <div class="hint">311 عنصر تسليم</div>
+          <div class="chart-wrap donut-wrap">
+            <svg viewBox="0 0 160 160" width="150" height="150">
+              <circle cx="80" cy="80" r="58" fill="none" stroke="var(--surface2)" stroke-width="26"/>
+              <circle cx="80" cy="80" r="58" fill="none" stroke="#22C58B" stroke-width="26"
+                stroke-dasharray="109.7 254.3" stroke-dashoffset="0" transform="rotate(-90 80 80)"/>
+              <circle cx="80" cy="80" r="58" fill="none" stroke="#FFB020" stroke-width="26"
+                stroke-dasharray="107.7 256.3" stroke-dashoffset="-109.7" transform="rotate(-90 80 80)"/>
+              <circle cx="80" cy="80" r="58" fill="none" stroke="#4C8DFF" stroke-width="26"
+                stroke-dasharray="91.8 272.2" stroke-dashoffset="-217.4" transform="rotate(-90 80 80)"/>
+              <circle cx="80" cy="80" r="58" fill="none" stroke="#2DD4C8" stroke-width="26"
+                stroke-dasharray="4 360" stroke-dashoffset="-309.2" transform="rotate(-90 80 80)"/>
+            </svg>
+            <div class="donut-center"><strong>311</strong>إجمالي العناصر</div>
+            <div class="legend-row">
+              <span class="legend-item"><span class="legend-dot" style="background:#22C58B"></span>مكتمل 109</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#FFB020"></span>مقترح 107</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#4C8DFF"></span>قيد التنفيذ 91</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#2DD4C8"></span>محلول 4</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>الإنشاء مقابل الإغلاق أسبوعيًا</h3>
+          <div class="hint">10–24 أغسطس</div>
+          <div class="chart-wrap">
+            <svg class="linechart" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet">
+              <line class="grid-line" x1="20" y1="20" x2="20" y2="170"/>
+              <line class="grid-line" x1="20" y1="170" x2="290" y2="170"/>
+              <line class="grid-line" x1="20" y1="95" x2="290" y2="95"/>
+              <line class="grid-line" x1="20" y1="20" x2="290" y2="20"/>
+              <polyline points="40,55.9 165,20 285,88.6" fill="none" stroke="#4C8DFF" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+              <polyline points="40,163.8 165,113.4 285,95.3" fill="none" stroke="#22C58B" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+              <circle cx="40" cy="55.9" r="4" fill="#4C8DFF"/><circle cx="165" cy="20" r="4" fill="#4C8DFF"/><circle cx="285" cy="88.6" r="4" fill="#4C8DFF"/>
+              <circle cx="40" cy="163.8" r="4" fill="#22C58B"/><circle cx="165" cy="113.4" r="4" fill="#22C58B"/><circle cx="285" cy="95.3" r="4" fill="#22C58B"/>
+              <text class="pt-label" x="40" y="185" text-anchor="middle">10 Aug</text>
+              <text class="pt-label" x="165" y="185" text-anchor="middle">17 Aug</text>
+              <text class="pt-label" x="285" y="185" text-anchor="middle">24 Aug</text>
+            </svg>
+            <div class="legend-row">
+              <span class="legend-item"><span class="legend-dot" style="background:#4C8DFF"></span>تم إنشاؤه (97، 141، 73)</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#22C58B"></span>تم إغلاقه (5، 39، 65)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>أداء الفريق</h2><span>يُقاس عبر المهام المكتملة — أعلى 8 أعضاء</span></div>
+      <div class="grid-2 chart-heavy">
+        <div class="card">
+          <h3>المهام لكل عضو</h3>
+          <div class="hint">الاسم الكامل ظاهر دون قطع</div>
+          <div class="chart-wrap tall">
+            <div class="hbars">
+              <div class="hbar-row"><span class="lbl">Omar Abdalrahman</span><div class="hbar-track"><div class="hbar-fill" style="width:100%; background:var(--purple)"></div></div><span class="val">59</span></div>
+              <div class="hbar-row"><span class="lbl">hossam aman</span><div class="hbar-track"><div class="hbar-fill" style="width:92%; background:var(--purple)"></div></div><span class="val">54</span></div>
+              <div class="hbar-row"><span class="lbl">Unassigned</span><div class="hbar-track"><div class="hbar-fill" style="width:46%; background:var(--purple)"></div></div><span class="val">27</span></div>
+              <div class="hbar-row"><span class="lbl">Ashraf Isack</span><div class="hbar-track"><div class="hbar-fill" style="width:39%; background:var(--purple)"></div></div><span class="val">23</span></div>
+              <div class="hbar-row"><span class="lbl">youssef deep</span><div class="hbar-track"><div class="hbar-fill" style="width:34%; background:var(--purple)"></div></div><span class="val">20</span></div>
+              <div class="hbar-row"><span class="lbl">mostafa samy</span><div class="hbar-track"><div class="hbar-fill" style="width:29%; background:var(--purple)"></div></div><span class="val">17</span></div>
+              <div class="hbar-row"><span class="lbl">Soliman Elzawawy</span><div class="hbar-track"><div class="hbar-fill" style="width:25%; background:var(--purple)"></div></div><span class="val">15</span></div>
+              <div class="hbar-row"><span class="lbl">Abdelrahman Abdelmoneam</span><div class="hbar-track"><div class="hbar-fill" style="width:14%; background:var(--purple)"></div></div><span class="val">8</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>تفصيل الفريق</h3>
+          <table>
+            <thead><tr><th>العضو</th><th>المهام</th><th>الاكتمال</th></tr></thead>
+            <tbody>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#4C8DFF">OA</div><span class="name-txt">Omar Abdalrahman</span></div></td><td class="num">59</td><td><span class="pctpill zero">0%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#22C58B">HA</div><span class="name-txt">hossam aman</span></div></td><td class="num">54</td><td><span class="pctpill high">89%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#6B7386">—</div><span class="name-txt">Unassigned</span></div></td><td class="num">27</td><td><span class="pctpill zero">0%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#9B6BFF">AI</div><span class="name-txt">Ashraf Isack</span></div></td><td class="num">23</td><td><span class="pctpill mid">61%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#2DD4C8">YD</div><span class="name-txt">youssef deep</span></div></td><td class="num">20</td><td><span class="pctpill high">100%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#FFB020">MS</div><span class="name-txt">mostafa samy</span></div></td><td class="num">17</td><td><span class="pctpill mid">53%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#FF6FA5">SE</div><span class="name-txt">Soliman Elzawawy</span></div></td><td class="num">15</td><td><span class="pctpill mid">67%</span></td></tr>
+              <tr><td><div class="name-cell"><div class="avatar" style="background:#FF5C5C">AA</div><span class="name-txt">Abdelrahman Abdelmoneam</span></div></td><td class="num">8</td><td><span class="pctpill high">100%</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>تحليل المجالات</h2><span>توزيع العناصر حسب مسار المجال</span></div>
+      <div class="grid-2 chart-heavy">
+        <div class="card">
+          <h3>الإجمالي لكل مجال</h3>
+          <div class="chart-wrap">
+            <div class="hbars">
+              <div class="hbar-row"><span class="lbl">Hoteliana Dashboard</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:100%"></div><div class="hbar-fill" style="width:33%; background:var(--teal)"></div></div><span class="val">132</span></div>
+              <div class="hbar-row"><span class="lbl">Agent Dashboard</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:68%"></div><div class="hbar-fill" style="width:37%; background:var(--teal)"></div></div><span class="val">90</span></div>
+              <div class="hbar-row"><span class="lbl">Supplier Dashboard</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:67%"></div><div class="hbar-fill" style="width:36%; background:var(--teal)"></div></div><span class="val">88</span></div>
+              <div class="hbar-row"><span class="lbl">Hoteliana</span><div class="hbar-track"><div class="hbar-fill ghost" style="width:1%"></div></div><span class="val">1</span></div>
+            </div>
+            <div class="legend-row">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--line)"></span>الإجمالي</span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>مكتمل</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>تفصيل المجالات</h3>
+          <table>
+            <thead><tr><th>المجال</th><th>الإجمالي</th><th>مكتمل</th></tr></thead>
+            <tbody>
+              <tr><td>Hoteliana Dashboard</td><td class="num">132</td><td class="num">44</td></tr>
+              <tr><td>Agent Dashboard</td><td class="num">90</td><td class="num">33</td></tr>
+              <tr><td>Supplier Dashboard</td><td class="num">88</td><td class="num">32</td></tr>
+              <tr><td>Hoteliana</td><td class="num">1</td><td class="num">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function toggleTheme(){
+  const root = document.documentElement;
+  root.setAttribute('data-mode', root.getAttribute('data-mode') === 'light' ? 'dark' : 'light');
+}
+</script>
+</body>
+</html>
