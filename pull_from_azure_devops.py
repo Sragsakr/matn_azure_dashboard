@@ -36,6 +36,8 @@ import os
 import sys
 import base64
 import datetime
+from urllib.parse import quote
+
 import requests
 import openpyxl
 
@@ -94,6 +96,7 @@ def get_work_items_batch(ids):
         "Microsoft.VSTS.Common.Priority", "System.CreatedDate",
         "System.ChangedDate", "Microsoft.VSTS.Common.StateChangeDate",
         "Microsoft.VSTS.Common.ClosedDate", "System.Tags",
+        "System.BoardColumn", "System.BoardColumnDone", "System.BoardLane",
     ]
     all_items = []
     for i in range(0, len(ids), 200):
@@ -104,6 +107,35 @@ def get_work_items_batch(ids):
         resp.raise_for_status()
         all_items.extend(resp.json().get("value", []))
     return all_items
+
+
+def enrich_state_categories(items):
+    """Attach Azure's canonical category for every custom state."""
+    work_types = {
+        field(item, "System.WorkItemType", None)
+        for item in items
+        if field(item, "System.WorkItemType", None)
+    }
+    categories = {}
+    for work_type in work_types:
+        url = (
+            f"{BASE_URL}/wit/workitemtypes/{quote(work_type, safe='')}/states"
+            f"?api-version={API_VERSION}"
+        )
+        try:
+            response = requests.get(url, headers=AUTH_HEADER, timeout=15)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            print(f"WARNING: Could not read state metadata for {work_type}: {exc}")
+            continue
+        for state in response.json().get("value", []):
+            categories[(work_type, state.get("name"))] = state.get("category")
+
+    for item in items:
+        item["_state_category"] = categories.get((
+            field(item, "System.WorkItemType", None),
+            field(item, "System.State", None),
+        ))
 
 
 def field(wi, name, default=""):
@@ -127,6 +159,10 @@ def write_to_workbook(items):
         ("Title", "System.Title"),
         ("Work Item Type", "System.WorkItemType"),
         ("State", "System.State"),
+        ("State Category", "_state_category"),
+        ("Board Column", "System.BoardColumn"),
+        ("Board Column Done", "System.BoardColumnDone"),
+        ("Board Lane", "System.BoardLane"),
         ("Assigned To", "System.AssignedTo"),
         ("Iteration Path", "System.IterationPath"),
         ("Area Path", "System.AreaPath"),
@@ -166,6 +202,8 @@ def write_to_workbook(items):
                 value = f"{org_project_url}{wi_id}" if wi_id else ""
             elif azure_field == "System.Id":
                 value = wi_id
+            elif azure_field == "_state_category":
+                value = wi.get("_state_category")
             else:
                 value = field(wi, azure_field, None)
                 if azure_field in date_fields and value:
@@ -191,6 +229,7 @@ def main():
         print("Nothing to write. Check ORG_NAME / PROJECT_NAME / ITERATION_PATH.")
         return
     items = get_work_items_batch(ids)
+    enrich_state_categories(items)
     write_to_workbook(items)
     print(f"Wrote {len(items)} work items into '{WORKBOOK_PATH}' -> Raw Data tab.")
 

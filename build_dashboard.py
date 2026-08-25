@@ -22,9 +22,12 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 WORKBOOK = Path("Delivery_Manager_Dashboard.xlsx")
 TODAY = dt.date.today()
-DEV_TYPES = {"Epic", "Feature", "User Story", "Task"}
+DELIVERY_TYPES = ("Epic", "Feature", "User Story", "Task", "Bug")
+DEV_TYPES = set(DELIVERY_TYPES)
+# Fallbacks for older workbook caches; fresh pulls carry Azure state categories.
 DONE_STATES = {"Closed", "Done", "Resolved", "Completed"}
 ACTIVE_STATES = {"Active", "In Progress", "Committed"}
+TERMINAL_CATEGORIES = {"Completed", "Removed"}
 PROJECT_ROOT = "Hoteliana"
 
 # --- Analysis thresholds (single source of truth for the health verdicts) ---
@@ -92,12 +95,28 @@ def split_tags(value):
     return [tag.strip() for tag in str(value).split(";") if tag.strip()]
 
 
+def state_category(state, category=None):
+    if category:
+        return category
+    if state in DONE_STATES:
+        return "Completed"
+    if state in ACTIVE_STATES:
+        return "InProgress"
+    if str(state).lower() in {"removed", "deleted", "cut"}:
+        return "Removed"
+    return "Proposed"
+
+
 def is_done(item):
-    return item["state"] in DONE_STATES
+    return item["state_category"] == "Completed"
+
+
+def is_open(item):
+    return item["state_category"] not in TERMINAL_CATEGORIES
 
 
 def is_active(item):
-    return item["state"] in ACTIVE_STATES
+    return item["state_category"] == "InProgress"
 
 
 def read_raw(wb):
@@ -129,11 +148,15 @@ def read_raw(wb):
         created = parse_date(value(row, "Created Date"))
         changed = parse_date(value(row, "Changed Date"))
         closed = parse_date(value(row, "Closed Date"))
+        state = value(row, "State") or "Unknown"
         item = {
             "id": value(row, "Work Item ID"),
             "title": value(row, "Title") or "",
             "type": value(row, "Work Item Type") or "Unknown",
-            "state": value(row, "State") or "Unknown",
+            "state": state,
+            "state_category": state_category(state, value(row, "State Category")),
+            "board_column": value(row, "Board Column") or state,
+            "board_lane": value(row, "Board Lane") or "Default",
             "assignee": value(row, "Assigned To") or "Unassigned",
             "iteration_path": iteration_path or "",
             "sprint": sprint_name(iteration_path),
@@ -253,10 +276,12 @@ def item_metrics(items):
     total = len(items)
     done = sum(is_done(i) for i in items)
     active = sum(is_active(i) for i in items)
-    open_count = total - done
-    unassigned = sum(i["assignee"] == "Unassigned" for i in items)
+    open_count = sum(is_open(i) for i in items)
+    unassigned = sum(
+        i["type"] == "Task" and i["assignee"] == "Unassigned" for i in items
+    )
     stale = sum(
-        not is_done(i) and i["age"] is not None and i["age"] >= STALE_DAYS
+        is_open(i) and i["age"] is not None and i["age"] >= STALE_DAYS
         for i in items
     )
     return {
@@ -325,7 +350,7 @@ def type_progress(items):
         by_type[item["type"]].append(item)
 
     result = {}
-    for t in ("Epic", "Feature", "User Story", "Task"):
+    for t in DELIVERY_TYPES:
         group = by_type.get(t, [])
         result[t] = {
             "total": len(group),
@@ -433,7 +458,7 @@ def delivery_action(items):
     scope = scope_metrics(items)
     unassigned = sum(1 for i in items if i["assignee"] == "Unassigned")
     active = sum(is_active(i) for i in items)
-    open_count = sum(not is_done(i) for i in items)
+    open_count = sum(is_open(i) for i in items)
 
     # The unassigned queue is the fastest, highest-impact lever; act on it
     # before anything else unless the sprint is already fully closed/done.
@@ -491,7 +516,7 @@ def build_executive(wb, dev):
     hierarchy_note = "(rolled up child→parent)" if prog["hierarchy_used"] else "(own-state — pull enhanced data for roll-up)"
     header_row(ws, 10, ["Work Type", "Total", "Done", "Completion %", hierarchy_note], 1)
     tr = 11
-    for t in ("Epic", "Feature", "User Story", "Task"):
+    for t in DELIVERY_TYPES:
         meta = prog[t]
         ws.cell(tr, 1, t)
         ws.cell(tr, 2, meta["total"])
@@ -512,12 +537,14 @@ def build_executive(wb, dev):
         row += 1
     style_table_body(ws, 11, row - 1, 7, 9)
 
-    section(ws, 16, "PRODUCT AREAS", 7, 12)
-    header_row(ws, 17, ["Area", "Stories", "Done", "Scope %", "Tasks", "Task %"], 7)
+    product_section_row = max(tr, row) + 1
+    product_header_row = product_section_row + 1
+    section(ws, product_section_row, "PRODUCT AREAS", 7, 12)
+    header_row(ws, product_header_row, ["Area", "Stories", "Done", "Scope %", "Tasks", "Task %"], 7)
     area_groups = defaultdict(list)
     for item in dev:
         area_groups[item["area"]].append(item)
-    ar = 18
+    ar = product_header_row + 1
     for area, items in sorted(area_groups.items(), key=lambda x: -len(x[1])):
         m = scope_metrics(items)
         values = [area, m["stories"], m["stories_done"], m["scope_pct"], m["tasks"], m["task_pct"]]
@@ -526,7 +553,7 @@ def build_executive(wb, dev):
         ws.cell(ar, 10).number_format = "0%"
         ws.cell(ar, 12).number_format = "0%"
         ar += 1
-    style_table_body(ws, 18, ar - 1, 7, 12)
+    style_table_body(ws, product_header_row + 1, ar - 1, 7, 12)
 
     alert_row_offset = ar
     section(ws, alert_row_offset + 1, "MANAGEMENT ALERTS", 1, 6)
@@ -578,8 +605,13 @@ def build_executive(wb, dev):
     bar.title = "Area scope — User Stories"
     bar.y_axis.title = "Area"
     bar.x_axis.title = "Stories"
-    bar.add_data(Reference(ws, min_col=8, min_row=17, max_row=ar - 1), titles_from_data=True)
-    bar.set_categories(Reference(ws, min_col=7, min_row=18, max_row=ar - 1))
+    bar.add_data(
+        Reference(ws, min_col=8, min_row=product_header_row, max_row=ar - 1),
+        titles_from_data=True,
+    )
+    bar.set_categories(
+        Reference(ws, min_col=7, min_row=product_header_row + 1, max_row=ar - 1)
+    )
     bar.height = 7.3
     bar.width = 12
     ws.add_chart(bar, "G27")
@@ -731,7 +763,7 @@ def build_team_analysis(wb, dev):
                 involved_stories.add(story_id)
         fully_done_stories = {sid for sid in involved_stories
                               if story_by_id.get(sid) and is_done(story_by_id[sid])}
-        current = [i for i in tasks if not is_done(i)]
+        current = [i for i in tasks if is_open(i)]
         work = " | ".join(f"#{i['id']} {i['title']} [{i['state']}]" for i in current)
         values = [
             assignee, len(tasks), done_tasks, done_tasks / len(tasks) if tasks else None,
@@ -791,8 +823,8 @@ def build_active_board(wb, dev):
     title(ws, "ACTIVE & OPEN WORK — TOUCH THIS NOW", "Everything open, risk-ranked; colour signals what to unblock first", 13)
     headers = ["Priority", "ID", "Title", "Type", "State", "Assignee", "Sprint", "Area", "Tags", "Age (days)", "Azure Link", "Why now"]
     header_row(ws, 4, headers)
-    open_items = [i for i in dev if not is_done(i)]
-    ordered = sorted(open_items, key=lambda i: (i["assignee"] == "Unassigned", i["state"] not in ACTIVE_STATES, -(i["age"] or -1), i["id"]))
+    open_items = [i for i in dev if is_open(i)]
+    ordered = sorted(open_items, key=lambda i: (i["assignee"] == "Unassigned", not is_active(i), -(i["age"] or -1), i["id"]))
     row = 5
     for item in ordered:
         priority = "High"
@@ -838,7 +870,7 @@ def build_risks(wb, dev):
     title(ws, "DELIVERY RISKS & AGING", "Open work ranked by age; age is days since Created Date, not time actively worked", 13)
     headers = ["Risk", "Age", "ID", "Title", "Type", "State", "Assignee", "Sprint", "Area", "Tags", "Created", "Changed", "Azure Link"]
     header_row(ws, 4, headers)
-    open_items = [i for i in dev if not is_done(i)]
+    open_items = [i for i in dev if is_open(i)]
     ordered = sorted(open_items, key=lambda i: (i["assignee"] != "Unassigned", -(i["age"] or -1), i["id"]))
     row = 5
     for item in ordered:

@@ -13,6 +13,7 @@ import os
 import base64
 import datetime as dt
 from collections import Counter, defaultdict
+from urllib.parse import quote
 
 import openpyxl
 import pandas as pd
@@ -25,9 +26,13 @@ PROJECT = "Hoteliana"
 API_VERSION = "7.1"
 WORKBOOK = "Delivery_Manager_Dashboard.xlsx"
 
+# Fallbacks keep older workbook caches useful. Live pulls use Azure's canonical
+# state categories, so newly-added custom states are classified correctly.
 DONE = {"Closed", "Done", "Resolved", "Completed"}
 ACTIVE = {"Active", "In Progress", "Committed"}
-DEV_TYPES = {"Epic", "Feature", "User Story", "Task"}
+TERMINAL_CATEGORIES = {"Completed", "Removed"}
+DELIVERY_TYPES = ("Epic", "Feature", "User Story", "Task", "Bug")
+DEV_TYPES = set(DELIVERY_TYPES)
 STALE_DAYS = 14
 PB = "Product Backlog"  # project-only iteration label
 
@@ -89,9 +94,29 @@ def _pat():
     return os.environ.get("AZDO_PAT")
 
 
+def _state_categories(base, headers, work_item_types):
+    """Return Azure state category keyed by (work-item type, state name)."""
+    categories = {}
+    for work_type in work_item_types:
+        try:
+            response = requests.get(
+                f"{base}/wit/workitemtypes/{quote(work_type, safe='')}/states"
+                f"?api-version={API_VERSION}",
+                headers=headers,
+                timeout=15,
+            )
+            response.raise_for_status()
+            for state in response.json().get("value", []):
+                categories[(work_type, state.get("name"))] = state.get("category")
+        except requests.RequestException:
+            # A restricted PAT may read work items but not process metadata.
+            # Classification then falls back to the known state names below.
+            continue
+    return categories
+
+
 def pull_from_azure():
-    """Pull latest work items from Azure DevOps and return item dicts.
-    Raises requests.HTTPError on failure."""
+    """Pull and enrich the latest Azure DevOps work items."""
     pat = _pat()
     if not pat:
         raise ValueError("AZDO_PAT not set — cannot pull live data")
@@ -116,7 +141,8 @@ def pull_from_azure():
         "System.AssignedTo", "System.IterationPath", "System.AreaPath",
         "System.Parent", "Microsoft.VSTS.Scheduling.StoryPoints",
         "Microsoft.VSTS.Common.Priority", "System.CreatedDate",
-        "System.ChangedDate", "System.Tags",
+        "System.ChangedDate", "System.Tags", "System.BoardColumn",
+        "System.BoardColumnDone", "System.BoardLane",
     ]
     all_items = []
     for i in range(0, len(ids), 200):
@@ -126,17 +152,47 @@ def pull_from_azure():
             headers=hdr, json={"ids": chunk, "fields": fields}, timeout=30)
         resp.raise_for_status()
         all_items.extend(resp.json().get("value", []))
+
+    work_types = {
+        item.get("fields", {}).get("System.WorkItemType")
+        for item in all_items
+        if item.get("fields", {}).get("System.WorkItemType")
+    }
+    categories = _state_categories(base, hdr, work_types)
+    for item in all_items:
+        item_fields = item.get("fields", {})
+        item["_state_category"] = categories.get((
+            item_fields.get("System.WorkItemType"),
+            item_fields.get("System.State"),
+        ))
     return all_items
+
+
+def _category(state, category=None):
+    if category:
+        return category
+    if state in DONE:
+        return "Completed"
+    if state in ACTIVE:
+        return "InProgress"
+    if str(state).lower() in {"removed", "deleted", "cut"}:
+        return "Removed"
+    return "Proposed"
 
 
 def _wi(w):
     """Convert a raw Azure work item JSON to our normalized dict."""
     f = w.get("fields", {})
+    state = f.get("System.State") or "Unknown"
     return {
         "id": w.get("id"),
         "title": (f.get("System.Title") or ""),
         "type": (f.get("System.WorkItemType") or "Unknown"),
-        "state": (f.get("System.State") or "Unknown"),
+        "state": state,
+        "state_category": _category(state, w.get("_state_category")),
+        "board_column": f.get("System.BoardColumn") or state,
+        "board_column_done": bool(f.get("System.BoardColumnDone")),
+        "board_lane": f.get("System.BoardLane") or "Default",
         "assignee": (f.get("System.AssignedTo") or {}).get("displayName")
         if isinstance(f.get("System.AssignedTo"), dict) else (f.get("System.AssignedTo") or "Unassigned"),
         "sprint": _sprint(f.get("System.IterationPath")),
@@ -169,11 +225,16 @@ def read_workbook_items():
             i = idx.get(name)
             return row[i] if i is not None and i < len(row) else default
         created = _parse_date(g("Created Date"))
+        state = g("State") or "Unknown"
         items.append({
             "id": g("Work Item ID"),
             "title": g("Title") or "",
             "type": g("Work Item Type") or "Unknown",
-            "state": g("State") or "Unknown",
+            "state": state,
+            "state_category": _category(state, g("State Category")),
+            "board_column": g("Board Column") or state,
+            "board_column_done": bool(g("Board Column Done")),
+            "board_lane": g("Board Lane") or "Default",
             "assignee": g("Assigned To") or "Unassigned",
             "sprint": _sprint(g("Iteration Path")),
             "area": _leaf(g("Area Path") or PROJECT),
@@ -207,25 +268,33 @@ def load_items(force_pull=True):
 
 # ---------------------------------------------------------------- analysis
 def is_done(i):
-    return i["state"] in DONE
+    return i.get("state_category") == "Completed"
+
+
+def is_open(i):
+    return i.get("state_category") not in TERMINAL_CATEGORIES
+
+
+def is_active(i):
+    return i.get("state_category") == "InProgress"
 
 
 def item_metrics(items):
     total = len(items)
     done = sum(is_done(i) for i in items)
-    active = sum(i["state"] in ACTIVE for i in items)
+    active = sum(is_active(i) for i in items)
     return {
         "total": total,
         "done": done,
         "active": active,
-        "open": total - done,
+        "open": sum(is_open(i) for i in items),
         # User Stories are intentionally shared across task owners; only an
         # unassigned Task is an actionable ownership risk.
         "unassigned": sum(
             i["type"] == "Task" and i["assignee"] == "Unassigned"
             for i in items
         ),
-        "stale": sum(not is_done(i) and i["created"] and (dt.date.today() - i["created"]).days >= STALE_DAYS for i in items),
+        "stale": sum(is_open(i) and i["created"] and (dt.date.today() - i["created"]).days >= STALE_DAYS for i in items),
         "done_pct": done / total if total else 0,
     }
 
@@ -260,7 +329,7 @@ def type_progress(items):
         return result
 
     agg = defaultdict(lambda: {"total": 0, "done": 0})
-    for t in ("Epic", "Feature", "User Story", "Task"):
+    for t in DELIVERY_TYPES:
         agg[t] = {"total": 0, "done": 0}
     for i in items:
         d = effective(i) if hier else is_done(i)
@@ -318,10 +387,42 @@ def percent(value):
     return round(value * 100, 1) if value is not None else None
 
 
+COLUMN_AR = {
+    "Work Type": "نوع العنصر", "Total": "الإجمالي", "Done": "مكتمل",
+    "Completion %": "نسبة الاكتمال", "State": "الحالة", "Category": "التصنيف",
+    "Items": "العناصر", "Iteration": "الدورة", "Total Dev Items": "إجمالي عناصر التسليم",
+    "User Stories": "قصص المستخدم", "Stories Done": "القصص المكتملة",
+    "Scope Done %": "اكتمال النطاق", "Tasks": "المهام", "Tasks Done": "المهام المكتملة",
+    "Task Done %": "اكتمال المهام", "Active": "قيد التنفيذ", "Unassigned": "بدون مسؤول",
+    "ID": "المعرف", "Title": "العنوان", "Type": "النوع", "State Category": "تصنيف الحالة",
+    "Board Column": "عمود اللوحة", "Board Lane": "مسار اللوحة", "Assignee": "المسؤول",
+    "Area": "المجال", "Tags": "الوسوم", "Priority": "الأولوية", "Created": "تاريخ الإنشاء",
+    "Changed": "تاريخ التعديل", "Age (d)": "العمر بالأيام", "Parent ID": "معرف الأصل",
+    "Azure Link": "رابط Azure", "Tag": "الوسم", "Stories": "القصص", "Scope %": "النطاق",
+    "Task %": "نسبة اكتمال المهام", "Areas": "المجالات", "Task Completion %": "اكتمال المهام",
+    "Open": "مفتوح", "Stories Involved": "القصص المشاركة", "Stories Fully Done": "القصص المكتملة",
+    "SP": "النقاط", "Done SP": "النقاط المكتملة", "Risk": "المخاطر", "Age": "العمر",
+    "Sprint": "السبرينت", "Check": "الفحص", "Count": "العدد", "Interpretation": "التفسير",
+    "Work Item ID": "معرف العنصر", "Work Item Type": "نوع العنصر", "Assigned To": "المسؤول",
+    "Iteration Path": "مسار الدورة", "Area Path": "مسار المجال", "Story Points": "نقاط القصة",
+    "Created Date": "تاريخ الإنشاء", "Changed Date": "تاريخ التعديل", "Board Column Done": "اكتمال عمود اللوحة",
+}
+
+
+def column_label(name):
+    return COLUMN_AR.get(name, name) if is_ar else name
+
+
+def localized_frame(frame):
+    if not is_ar:
+        return frame
+    return frame.rename(columns={name: column_label(name) for name in frame.columns})
+
+
 def percentage_columns(*names):
     """Streamlit table formatting for numeric 0..100 percentage columns."""
     return {
-        name: st.column_config.NumberColumn(name, format="%.1f%%")
+        column_label(name): st.column_config.NumberColumn(column_label(name), format="%.1f%%")
         for name in names
     }
 
@@ -344,97 +445,220 @@ def ribbon(scope, task, unassigned, stale):
 
 
 def delivery_action(items, unassigned):
-    open_count = sum(not is_done(i) for i in items)
+    open_count = sum(is_open(i) for i in items)
     if unassigned >= 25 and open_count:
-        return f"{unassigned} items are unassigned — assign owners first"
+        return tr(
+            f"{unassigned} tasks are unassigned — assign owners first",
+            f"يوجد {unassigned} مهمة بدون مسؤول — ابدأ بتحديد المسؤولين",
+        )
     scope = scope_metrics(items)
     if items and scope["scope_pct"] == 0 and open_count:
-        return "Scope stalled — no fully-complete story yet"
+        return tr(
+            "Scope stalled — no fully-complete story yet",
+            "النطاق متعطل — لا توجد قصة مكتملة بالكامل حتى الآن",
+        )
     if any(i["type"] == "User Story" and i["sp"] is None for i in items):
-        return "Add Story Points to unestimated stories"
-    return "Delivery on track"
+        return tr(
+            "Add Story Points to unestimated stories",
+            "أضف Story Points للقصص غير المقدّرة",
+        )
+    return tr("Delivery on track", "التسليم يسير حسب الخطة")
 
 
 # ============================================================ UI HELPERS
-def apply_theme():
-    st.markdown(
-        """
-        <style>
-        :root { --navy:#111827; --blue:#2563EB; --ink:#0F172A; --muted:#64748B; }
-        .stApp { background: #F3F6FB; }
-        .block-container { max-width: 1500px; padding: 1.4rem 2.2rem 3rem; }
-        h1 { color: var(--ink); font-size: 2rem !important; letter-spacing: -.03em; }
-        h2 { color: var(--ink); font-size: 1.45rem !important; margin-top: .2rem; }
-        h3 { color: #334155; font-size: 1.05rem !important; }
-        p, .stCaption { color: var(--muted); }
+def tr(english, arabic):
+    return arabic if is_ar else english
 
-        div[data-testid="stSidebar"] { background: var(--navy); border-right: 0; }
-        div[data-testid="stSidebar"] * { color: #E5E7EB; }
-        div[data-testid="stSidebar"] [data-testid="stMetric"] {
-            background: #1F2937; border-color: #374151; box-shadow: none;
-        }
-        div[data-testid="stSidebar"] [data-testid="stMetricValue"] { color: #FFF; }
+
+def apply_theme(arabic):
+    direction = "rtl" if arabic else "ltr"
+    align = "right" if arabic else "left"
+    css = """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap');
+        :root { --brand:#2563EB; --brand-soft:#EFF6FF; --ink:#111827; --muted:#6B7280; --line:#E5E7EB; }
+        html, body, [class*="css"] { font-family:'Inter','Noto Sans Arabic','Segoe UI',sans-serif; }
+        .stApp { background:#F8FAFC; direction:__DIR__; }
+        .block-container { max-width:1480px; padding:1.1rem 2rem 3rem; }
+        h1, h2, h3 { color:var(--ink); letter-spacing:-.02em; text-align:__ALIGN__; }
+        h2 { font-size:1.45rem !important; margin-top:.3rem; }
+        h3 { font-size:1.05rem !important; }
+        p, .stCaption { color:var(--muted); }
+
+        .enterprise-header { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+            background:#FFF; border:1px solid var(--line); border-radius:14px; padding:1rem 1.25rem;
+            margin:0 0 1.25rem; box-shadow:0 2px 5px rgba(15,23,42,.04); }
+        .enterprise-header h1 { margin:.12rem 0 0; font-size:1.32rem !important; font-weight:800; }
+        .header-kicker { color:#9CA3AF; font-size:.66rem; font-weight:800; letter-spacing:.14em; }
+        .azure-pill { display:inline-flex; align-items:center; gap:.45rem; border:1px solid #BFDBFE;
+            background:#EFF6FF; color:#1D4ED8; border-radius:9px; padding:.5rem .7rem;
+            font-size:.75rem; font-weight:700; white-space:nowrap; }
+        .azure-dot { width:7px; height:7px; border-radius:50%; background:#10B981; box-shadow:0 0 0 3px #D1FAE5; }
+
+        div[data-testid="stSidebar"] { background:#FFF; border-inline-end:1px solid var(--line); }
+        div[data-testid="stSidebar"] > div:first-child { padding-top:1rem; }
+        div[data-testid="stSidebar"] * { text-align:__ALIGN__; }
+        .sidebar-brand { display:flex; align-items:center; gap:.72rem; padding:.15rem .15rem 1rem;
+            margin-bottom:.65rem; border-bottom:1px solid #F1F5F9; }
+        .brand-mark { display:grid; place-items:center; width:39px; height:39px; border-radius:10px;
+            background:#2563EB; color:#FFF; font-size:1rem; font-weight:900;
+            box-shadow:0 5px 12px rgba(37,99,235,.22); }
+        .sidebar-brand strong { display:block; color:#1F2937; font-size:.88rem; letter-spacing:.035em; }
+        .sidebar-brand span { display:block; color:#9CA3AF; font-size:.7rem; margin-top:.06rem; }
+        .sidebar-label { color:#9CA3AF !important; font-size:.64rem; font-weight:800;
+            letter-spacing:.12em; margin:1rem .65rem .4rem; }
+        div[data-testid="stSidebar"] div[role="radiogroup"] { gap:.12rem; }
         div[data-testid="stSidebar"] div[role="radiogroup"] label {
-            padding: .45rem .65rem; border-radius: 8px; margin-bottom: 2px;
+            padding:.58rem .72rem; border:1px solid transparent; border-radius:10px;
+            margin-bottom:1px; transition:all .16s ease;
         }
-        div[data-testid="stSidebar"] div[role="radiogroup"] label:hover { background:#1F2937; }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label p { color:#4B5563; font-size:.84rem; }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label:hover { background:#F3F4F6; }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+            background:#EFF6FF; border-color:#DBEAFE; box-shadow:0 1px 2px rgba(37,99,235,.05);
+        }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {
+            color:#1D4ED8 !important; font-weight:700;
+        }
         div[data-testid="stSidebar"] button[kind="primary"] {
             width:100%; border:0; border-radius:9px; background:#2563EB;
-            box-shadow:0 6px 16px rgba(37,99,235,.35); font-weight:700;
+            box-shadow:0 4px 10px rgba(37,99,235,.2); font-weight:700;
         }
+        div[data-testid="stSidebar"] [data-testid="stMetric"] {
+            background:#F9FAFB; border:1px solid #E5E7EB; box-shadow:none;
+            min-height:70px; padding:8px 10px; border-radius:10px;
+        }
+        div[data-testid="stSidebar"] [data-testid="stMetricLabel"] p { color:#9CA3AF !important; font-size:.68rem; }
+        div[data-testid="stSidebar"] [data-testid="stMetricValue"] { color:#111827; font-size:1.05rem; }
+        div[data-testid="stSidebar"] [data-baseweb="button-group"] { width:100%; }
 
-        div[data-testid="stMetric"] {
-            background:#FFF; border:1px solid #E2E8F0; border-radius:14px;
-            padding:15px 14px; box-shadow:0 4px 14px rgba(15,23,42,.055);
-            min-height:112px;
-        }
-        div[data-testid="stMetric"] label { color:var(--muted); font-weight:650; }
-        div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-            color:var(--ink); font-weight:800; letter-spacing:-.03em;
-        }
-        div[data-testid="stDataFrame"] {
-            background:#FFF; border:1px solid #E2E8F0; border-radius:14px;
-            overflow:hidden; box-shadow:0 3px 12px rgba(15,23,42,.045);
-        }
-        div[data-testid="stAlert"] { border-radius:12px; }
-        hr { border-color:#E2E8F0; margin:.8rem 0 1.1rem; }
+        .kpi-card { min-height:128px; background:#FFF; border:1px solid #E5E7EB;
+            border-top:3px solid var(--accent); border-radius:14px; padding:1rem;
+            box-shadow:0 4px 7px -3px rgba(15,23,42,.08); transition:transform .18s ease,box-shadow .18s ease; }
+        .kpi-card:hover { transform:translateY(-2px); box-shadow:0 8px 18px -8px rgba(15,23,42,.18); }
+        .kpi-card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:.4rem; }
+        .kpi-label { color:#6B7280; font-size:.66rem; font-weight:800; letter-spacing:.075em; text-transform:uppercase; }
+        .kpi-icon { display:grid; place-items:center; width:29px; height:29px; border-radius:8px;
+            background:color-mix(in srgb,var(--accent) 10%,white); color:var(--accent); font-size:.85rem; }
+        .kpi-value { color:var(--accent); font-size:1.72rem; line-height:1.1; font-weight:800; margin-top:1rem; }
+        .health-ribbon { border:1px solid color-mix(in srgb,var(--health) 20%,white);
+            border-inline-start:4px solid var(--health); background:color-mix(in srgb,var(--health) 7%,white);
+            color:#1F2937; padding:.82rem 1rem; border-radius:11px; font-size:.9rem; font-weight:700; margin-bottom:1rem; }
+        div[data-testid="stDataFrame"] { background:#FFF; border:1px solid #E5E7EB; border-radius:12px;
+            overflow:hidden; box-shadow:0 2px 5px rgba(15,23,42,.035); }
+        div[data-testid="stAlert"] { border-radius:10px; }
+        hr { border-color:#E5E7EB; margin:.8rem 0 1.1rem; }
         #MainMenu, footer { visibility:hidden; }
+        @media (max-width:780px) {
+            .block-container { padding:.8rem 1rem 2rem; }
+            .enterprise-header { align-items:flex-start; }
+            .azure-pill { font-size:0; }
+            .azure-pill::after { content:'Azure'; font-size:.72rem; }
+        }
         </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    """.replace("__DIR__", direction).replace("__ALIGN__", align)
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def kpi_card(column, label, value, accent):
+    with column:
+        st.markdown(
+            f"<div class='kpi-card' style='--accent:{accent}'>"
+            f"<div class='kpi-card-top'><span class='kpi-label'>{label}</span>"
+            "<span class='kpi-icon'>◆</span></div>"
+            f"<div class='kpi-value'>{value}</div></div>",
+            unsafe_allow_html=True,
+        )
 
 
 # ---------------------------------------------------------------- rendering
-st.set_page_config(page_title="Delivery Manager — Hoteliana", layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Delivery Manager — Hoteliana",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-st.title("🚀 Delivery Manager — Hoteliana")
-st.caption("Azure DevOps delivery control tower. Smart task-centric scope, child→parent roll-up.")
+is_ar = st.session_state.get("language_selector", "العربية") == "العربية"
+apply_theme(is_ar)
 
-apply_theme()
+st.sidebar.markdown(
+    """
+    <div class="sidebar-brand">
+      <div class="brand-mark">M</div>
+      <div><strong>MATN DELIVERY</strong><span>Hoteliana workspace</span></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+st.sidebar.segmented_control(
+    tr("Language", "اللغة"),
+    ["العربية", "English"],
+    key="language_selector",
+    default="العربية",
+    label_visibility="collapsed",
+)
+st.sidebar.markdown(
+    f'<div class="sidebar-label">{tr("DATA CONTROL", "التحكم بالبيانات")}</div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f"""
+    <section class="enterprise-header">
+      <div>
+        <div class="header-kicker">MATN SOLUTIONS</div>
+        <h1>{tr("Strategic Delivery Command Center", "مركز القيادة الاستراتيجي للتسليم")}</h1>
+      </div>
+      <div class="azure-pill"><span class="azure-dot"></span>Azure DevOps · {PROJECT}</div>
+    </section>
+    """,
+    unsafe_allow_html=True,
+)
 
 user_missing = not _pat()
 if user_missing:
-    st.sidebar.warning("AZDO_PAT not set — showing data from the local workbook. "
-                       "Set it (env var/secret) to enable live Azure pulls.")
+    st.sidebar.warning(tr(
+        "AZDO_PAT is not set — showing the latest workbook snapshot.",
+        "رمز AZDO_PAT غير مضاف — يتم عرض آخر نسخة محفوظة من البيانات.",
+    ))
 
-refresh = st.sidebar.button("🔄 Refresh from Azure DevOps", type="primary")
+refresh = st.sidebar.button(
+    tr("↻  Sync Azure DevOps", "↻  مزامنة Azure DevOps"),
+    type="primary",
+)
 
-data_mode = "workbook"
-items = []
-if refresh and _pat():
-    with st.spinner("Pulling from Azure DevOps..."):
-        try:
-            items, data_mode = load_items(force_pull=True)
-            st.sidebar.success(f"Pulled {len(items)} items from Azure (live).")
-        except Exception as exc:
-            st.sidebar.error(f"Pull failed: {exc}")
-if not items:
-    # Auto-pull on first load when a secret exists but no local workbook does
-    # (typical on a cloud host): otherwise the app would show "no data".
-    auto = bool(_pat()) and not os.path.exists(WORKBOOK)
-    items, data_mode = load_items(force_pull=bool(refresh and _pat()) or auto)
+if refresh:
+    st.session_state.pop("azure_items", None)
+    st.session_state.pop("azure_data_mode", None)
+
+if "azure_items" not in st.session_state:
+    loading_text = tr(
+        "Syncing Azure DevOps data...",
+        "جارٍ مزامنة بيانات Azure DevOps...",
+    ) if _pat() else tr(
+        "Loading saved data...",
+        "جارٍ تحميل البيانات المحفوظة...",
+    )
+    with st.spinner(loading_text):
+        loaded_items, loaded_mode = load_items(force_pull=bool(_pat()))
+    st.session_state["azure_items"] = loaded_items
+    st.session_state["azure_data_mode"] = loaded_mode
+
+items = st.session_state["azure_items"]
+data_mode = st.session_state["azure_data_mode"]
+if refresh:
+    if data_mode == "live":
+        st.sidebar.success(tr(
+            f"Synced {len(items)} items from Azure.",
+            f"تمت مزامنة {len(items)} عنصر من Azure.",
+        ))
+    else:
+        error = st.session_state.get("last_pull_error", "Azure credentials are unavailable.")
+        st.sidebar.error(tr(
+            f"Sync failed; saved data is shown. {error}",
+            f"فشلت المزامنة؛ يتم عرض البيانات المحفوظة. {error}",
+        ))
 
 dev = [i for i in items if i["type"] in DEV_TYPES]
 
@@ -453,10 +677,6 @@ if not dev:
             "via AZDO_PAT to load any data.")
     st.stop()
 
-st.sidebar.metric("Data source", data_mode)
-st.sidebar.metric("Dev scope items", len(dev))
-st.sidebar.metric("All items", len(items))
-
 # Precompute shared analysis once (executive-only metrics used by sidebar).
 all_m = item_metrics(dev)
 scope = scope_metrics([i for i in dev if i["sprint"] != PB])
@@ -464,69 +684,117 @@ verdict, color = ribbon(scope["scope_pct"], scope["task_pct"], all_m["unassigned
 prog = type_progress(dev)
 
 # ---- Sidebar navigation: one section per tab, mirroring the Excel workbook
-PAGES = [
-    "Executive Dashboard",
-    "Sprint Summary",
-    "Sprint Board",
-    "Tag Analysis",
-    "Team Analysis",
-    "Area Analysis",
-    "Active Now",
-    "Risks & Aging",
-    "Data Quality",
-    "Releases",
-    "Raw Data",
-]
-page = st.sidebar.radio("📊 Sections", PAGES)
+PAGES = {
+    "Executive Dashboard": ("◈  Executive overview", "◈  النظرة التنفيذية"),
+    "Sprint Summary": ("◷  Sprint summary", "◷  ملخص السبرينت"),
+    "Sprint Board": ("▦  Sprint board", "▦  لوحة السبرينت"),
+    "Tag Analysis": ("#  Tag analysis", "#  تحليل الوسوم"),
+    "Team Analysis": ("◎  Team delivery", "◎  أداء الفريق"),
+    "Area Analysis": ("◇  Area analysis", "◇  تحليل المجالات"),
+    "Active Now": ("⚡  Active now", "⚡  العمل الحالي"),
+    "Risks & Aging": ("△  Risks & aging", "△  المخاطر والتقادم"),
+    "Data Quality": ("✓  Data quality", "✓  جودة البيانات"),
+    "Releases": ("🚩  Releases", "🚩  الإصدارات"),
+    "Raw Data": ("▤  Raw data", "▤  البيانات الخام"),
+}
+st.sidebar.markdown(
+    f'<div class="sidebar-label">{tr("CORE OPERATIONS", "العمليات الأساسية")}</div>',
+    unsafe_allow_html=True,
+)
+page = st.sidebar.radio(
+    tr("Sections", "الأقسام"),
+    list(PAGES),
+    format_func=lambda key: PAGES[key][1 if is_ar else 0],
+    label_visibility="collapsed",
+)
+st.sidebar.markdown(
+    f'<div class="sidebar-label">{tr("SCOPE SNAPSHOT", "ملخص النطاق")}</div>',
+    unsafe_allow_html=True,
+)
+source_col, scope_col = st.sidebar.columns(2)
+source_col.metric(tr("Source", "المصدر"), tr(data_mode.title(), "مباشر" if data_mode == "live" else "محفوظ"))
+scope_col.metric(tr("Delivery", "التسليم"), len(dev))
+st.sidebar.caption(tr(
+    f"{len(items):,} total Azure work items",
+    f"إجمالي عناصر Azure: {len(items):,}",
+))
 
-st.caption(f"Refresh pulls directly from {ORG}/{PROJECT}." if data_mode == "live"
-           else "Showing workbook cache. Set AZDO_PAT + Refresh for live data.")
+st.caption(tr(
+    f"Live synchronization with {ORG}/{PROJECT}." if data_mode == "live" else "Showing the latest saved Azure snapshot.",
+    f"مزامنة مباشرة مع {ORG}/{PROJECT}." if data_mode == "live" else "يتم عرض آخر نسخة محفوظة من بيانات Azure.",
+))
 st.divider()
 
 
 # ============================================================ EXECUTIVE
 def render_executive():
-    st.header("🚀 Executive Dashboard")
+    st.header(tr("Executive Delivery Overview", "النظرة التنفيذية للتسليم"))
+    st.caption(tr(
+        "Live Azure DevOps delivery health, ownership and execution signals.",
+        "مؤشرات حية لصحة التسليم والتنفيذ وتوزيع المسؤوليات من Azure DevOps.",
+    ))
+    verdict_label = {
+        "HEALTHY": tr("Healthy", "مستقر"),
+        "AT RISK": tr("At risk", "معرّض للخطر"),
+        "CRITICAL": tr("Critical", "حرج"),
+    }[verdict]
     st.markdown(
-        f"<div style='background:{color};color:white;padding:14px 20px;border-radius:10px;"
-        f"font-size:20px;font-weight:700'>{verdict} — {delivery_action(dev, all_m['unassigned'])}</div>",
+        f"<div class='health-ribbon' style='--health:{color}'>"
+        f"{verdict_label} · {delivery_action(dev, all_m['unassigned'])}</div>",
         unsafe_allow_html=True,
     )
 
     if not dev:
-        st.warning("No work items to chart yet.")
+        st.warning(tr("No work items to chart yet.", "لا توجد عناصر عمل لعرضها."))
         return
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Story Scope Done", f"{scope['scope_pct'] or 0:.0%}")
-    c2.metric("Task Completion", f"{scope['task_pct'] or 0:.0%}")
-    c3.metric("Active Now", all_m["active"])
-    c4.metric("Unassigned", all_m["unassigned"])
-    c5.metric("Product Backlog", sum(1 for i in dev if i["sprint"] == PB))
-    c6.metric("Stale (≥14d)", all_m["stale"])
+    columns = st.columns(6)
+    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", "#059669")
+    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", "#2563EB")
+    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], "#7C3AED")
+    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], "#DC2626")
+    backlog_count = sum(1 for item in dev if item["sprint"] == PB)
+    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, "#CA8A04")
+    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], "#EA580C")
 
-    st.subheader("Completion by work type")
+    st.subheader(tr("Completion by work type", "الاكتمال حسب نوع عنصر العمل"))
     prog_df = pd.DataFrame([
-        {"Work Type": t, "Total": m["total"], "Done": m["done"], "Completion %": percent(m["pct"])}
-        for t, m in [("Epic", prog["Epic"]), ("Feature", prog["Feature"]),
-                     ("User Story", prog["User Story"]), ("Task", prog["Task"])]
+        {"Work Type": work_type, "Total": prog[work_type]["total"],
+         "Done": prog[work_type]["done"],
+         "Completion %": percent(prog[work_type]["pct"])}
+        for work_type in DELIVERY_TYPES
     ])
     st.dataframe(
-        prog_df, width="stretch", hide_index=True,
+        localized_frame(prog_df), width="stretch", hide_index=True,
         column_config=percentage_columns("Completion %"),
     )
-    hier_txt = "child→parent roll-up active ✅" if prog["hierarchy_used"] else "own-state (add Parent ID for roll-up)"
-    st.caption(f"Hierarchy: {hier_txt}")
+    hier_txt = tr(
+        "child→parent roll-up active ✅",
+        "تجميع نتائج الأبناء إلى العناصر الرئيسية مفعّل ✅",
+    ) if prog["hierarchy_used"] else tr(
+        "own-state (add Parent ID for roll-up)",
+        "الاعتماد على حالة العنصر (أضف Parent ID لتفعيل التجميع)",
+    )
+    st.caption(tr(f"Hierarchy: {hier_txt}", f"التسلسل الهرمي: {hier_txt}"))
 
-    st.subheader("Work by state")
-    state_df = pd.DataFrame([
-        {"State": s, "Items": n} for s, n in Counter(i["state"] for i in dev).most_common()
+    st.subheader(tr("Current board flow", "تدفق العمل الحالي"))
+    board_df = pd.DataFrame([
+        {"Board Column": column, "Items": count}
+        for column, count in Counter(i["board_column"] for i in dev).most_common()
     ])
-    col_l, col_r = st.columns([1, 1])
+    state_df = pd.DataFrame([
+        {"State": state, "Category": category, "Items": count}
+        for (state, category), count in Counter(
+            (i["state"], i["state_category"]) for i in dev
+        ).most_common()
+    ])
+    col_l, col_r = st.columns([1.2, 1])
     with col_l:
-        st.bar_chart(state_df.set_index("State"))
+        st.caption(tr("Items by Azure Board column", "العناصر حسب عمود Azure Board"))
+        st.bar_chart(board_df.set_index("Board Column"))
     with col_r:
-        st.dataframe(state_df, width="stretch", hide_index=True)
+        st.caption(tr("Exact Azure states and canonical categories", "حالات Azure الفعلية وتصنيفاتها"))
+        st.dataframe(localized_frame(state_df), width="stretch", hide_index=True)
 
 
 # ============================================================ SPRINT SUMMARY
@@ -557,34 +825,36 @@ def sprint_summary_df():
 
 
 def render_sprint_summary():
-    st.header("📅 Sprint Summary")
-    st.caption("One row per real Azure iteration; Product Backlog shown separately.")
+    st.header(tr("Sprint Summary", "ملخص السبرينت"))
+    st.caption(tr("One row per Azure iteration; Product Backlog is shown separately.", "صف لكل دورة Azure مع عرض Product Backlog بشكل منفصل."))
     st.dataframe(
-        sprint_summary_df(), width="stretch", hide_index=True,
+        localized_frame(sprint_summary_df()), width="stretch", hide_index=True,
         column_config=percentage_columns("Scope Done %", "Task Done %"),
     )
 
 
 # ============================================================ SPRINT BOARD
 def render_sprint_board():
-    st.header("📋 Sprint Board")
-    st.caption("Every dev work item grouped by iteration and assignee, with Azure links.")
+    st.header(tr("Sprint Board", "لوحة السبرينت"))
+    st.caption(tr("Delivery work grouped by iteration and assignee, with Azure links.", "عناصر التسليم مجمعة حسب الدورة والمسؤول مع روابط Azure."))
     df = pd.DataFrame([{
         "Iteration": i["sprint"], "ID": i["id"], "Title": i["title"], "Type": i["type"],
-        "State": i["state"], "Assignee": i["assignee"], "Area": i["area"],
+        "State": i["state"], "State Category": i["state_category"],
+        "Board Column": i["board_column"], "Board Lane": i["board_lane"],
+        "Assignee": i["assignee"], "Area": i["area"],
         "Tags": "; ".join(i["tags"]) or "Untagged", "SP": i["sp"],
         "Priority": i["priority"],
         "Created": i["created"], "Changed": i["changed"],
         "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
         "Parent ID": i["parent"], "Azure Link": i["url"],
     } for i in dev])
-    st.dataframe(df, width="stretch", hide_index=True, height=500)
+    st.dataframe(localized_frame(df), width="stretch", hide_index=True, height=500)
 
 
 # ============================================================ TAG ANALYSIS
 def render_tag_analysis():
-    st.header("🏷️ Tag Analysis")
-    st.caption("Multi-tag items counted once per tag; Untagged shown explicitly.")
+    st.header(tr("Tag Analysis", "تحليل الوسوم"))
+    st.caption(tr("Multi-tag items are counted once per tag; untagged work is explicit.", "يتم احتساب العنصر تحت كل وسم مع إظهار العناصر غير المصنفة."))
     tag_map = defaultdict(list)
     for i in dev:
         for t in (i["tags"] or ["Untagged"]):
@@ -604,7 +874,7 @@ def render_tag_analysis():
             "Areas": ", ".join(sorted({i["area"] for i in members})),
         })
     st.dataframe(
-        pd.DataFrame(rows), width="stretch", hide_index=True,
+        localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True,
         column_config=percentage_columns("Scope %", "Task %"),
     )
 
@@ -640,8 +910,8 @@ def team_df():
             "Tasks": len(owned_tasks),
             "Tasks Done": done_count,
             "Task Completion %": percent(done_count / len(owned_tasks)),
-            "Active": sum(task["state"] in ACTIVE for task in owned_tasks),
-            "Open": sum(not is_done(task) for task in owned_tasks),
+            "Active": sum(is_active(task) for task in owned_tasks),
+            "Open": sum(is_open(task) for task in owned_tasks),
             f"Open ≥{STALE_DAYS}d": item_metrics(owned_tasks)["stale"],
             "Stories Involved": len(involved_story_ids),
             "Stories Fully Done": len(involved_story_ids & completed_story_ids),
@@ -651,10 +921,10 @@ def team_df():
 
 
 def render_team_analysis():
-    st.header("👥 Team Delivery (task-centric)")
-    st.caption("A story is rarely owned by one person; members are credited through Tasks they completed.")
+    st.header(tr("Team Delivery", "أداء الفريق"))
+    st.caption(tr("Team contribution is measured through completed Tasks.", "تُقاس مساهمة أعضاء الفريق من خلال المهام المكتملة."))
     st.dataframe(
-        team_df(), width="stretch", hide_index=True,
+        localized_frame(team_df()), width="stretch", hide_index=True,
         column_config=percentage_columns("Task Completion %"),
     )
 
@@ -680,23 +950,23 @@ def area_df():
 
 
 def render_area_analysis():
-    st.header("🗂️ Area Analysis")
-    st.caption("Scope & execution split across Azure Area Paths.")
+    st.header(tr("Area Analysis", "تحليل المجالات"))
+    st.caption(tr("Scope and execution across Azure Area Paths.", "توزيع النطاق والتنفيذ حسب مسارات Azure."))
     st.dataframe(
-        area_df(), width="stretch", hide_index=True,
+        localized_frame(area_df()), width="stretch", hide_index=True,
         column_config=percentage_columns("Scope %", "Task %"),
     )
 
 
 # ============================================================ ACTIVE NOW
 def render_active_now():
-    st.header("⚡ Active & Open Work — Touch This Now")
-    st.caption("Everything open, ordered by risk (unassigned > active > aging).")
-    open_items = [i for i in dev if not is_done(i)]
+    st.header(tr("Active & Open Work", "العمل الحالي والمفتوح"))
+    st.caption(tr("Open work ordered by ownership and aging risk.", "العمل المفتوح مرتب حسب المسؤولية وخطر التقادم."))
+    open_items = [i for i in dev if is_open(i)]
     def priority(item):
         if item["assignee"] == "Unassigned":
             return "Critical"
-        if item["state"] in ACTIVE:
+        if is_active(item):
             return "Doing"
         if item["created"] and (dt.date.today() - item["created"]).days >= STALE_DAYS:
             return "Aging"
@@ -707,22 +977,23 @@ def render_active_now():
     for i in sorted(open_items, key=lambda x: priority(x)):
         rows.append({
             "Priority": priority(i), "ID": i["id"], "Title": i["title"], "Type": i["type"],
-            "State": i["state"], "Assignee": i["assignee"], "Sprint": i["sprint"],
+            "State": i["state"], "Board Column": i["board_column"],
+            "Assignee": i["assignee"], "Sprint": i["sprint"],
             "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
             "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
             "Azure Link": i["url"],
         })
     if rows:
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=500)
+        st.dataframe(localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True, height=500)
     else:
-        st.success("No open work — all done!")
+        st.success(tr("No open work — all done!", "لا يوجد عمل مفتوح — كل العناصر مكتملة!"))
 
 
 # ============================================================ RISKS & AGING
 def render_risks():
-    st.header("⚠️ Risks & Aging")
-    st.caption("Open work ranked by age; age = days since Created Date.")
-    open_items = [i for i in dev if not is_done(i)]
+    st.header(tr("Risks & Aging", "المخاطر والتقادم"))
+    st.caption(tr("Open work ranked by days since creation.", "العمل المفتوح مرتب حسب عدد الأيام منذ الإنشاء."))
+    open_items = [i for i in dev if is_open(i)]
     ordered = sorted(open_items, key=lambda i: (i["assignee"] != "Unassigned",
                                                 -(i["created"] and (dt.date.today() - i["created"]).days or -1),
                                                 i["id"]))
@@ -744,15 +1015,15 @@ def render_risks():
             "Sprint": i["sprint"], "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
             "Azure Link": i["url"],
         })
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, height=500)
+    st.dataframe(localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True, height=500)
 
 
 # ============================================================ DATA QUALITY
 def render_data_quality():
-    st.header("🔍 Data Quality & Trust")
+    st.header(tr("Data Quality & Trust", "جودة وموثوقية البيانات"))
     rows = [
         ("All Azure work items imported", len(items), "Exact"),
-        ("Dev scope (Epic+Feature+Story+Task)", len(dev), "Exact"),
+        ("Delivery scope (Epic+Feature+Story+Task+Bug)", len(dev), "Exact"),
         ("Test artifacts retained in Raw Data", len(items) - len(dev), "Excluded from delivery scope"),
         ("Items in real sprint paths", sum(1 for i in dev if i["sprint"] != PB), "Exact"),
         ("Product Backlog (no sprint)", sum(1 for i in dev if i["sprint"] == PB), "Exact"),
@@ -761,13 +1032,13 @@ def render_data_quality():
         ("User Stories without Story Points", sum(1 for i in dev if i["type"] == "User Story" and i["sp"] is None), "Exact"),
         ("Items with Parent ID", sum(1 for i in dev if i["parent"] is not None), "Enables hierarchy roll-up"),
     ]
-    st.dataframe(pd.DataFrame(rows, columns=["Check", "Count", "Interpretation"]),
+    st.dataframe(localized_frame(pd.DataFrame(rows, columns=["Check", "Count", "Interpretation"])),
                  width="stretch", hide_index=True)
 
 
 # ============================================================ RELEASES
 def render_releases():
-    st.header("🚦 Releases")
+    st.header(tr("Releases", "الإصدارات"))
     # Release plans / target dates are not part of the Azure work-item pull.
     # This mirrors the workbook's "Releases" tab (release intelligence / manual input).
     release_rows = [{
@@ -775,27 +1046,35 @@ def render_releases():
         "Platform": "", "Target Date": None, "Actual Date": None,
         "Status": "", "Owner": "", "Release Notes": "Connect Azure Pipelines/Delivery Plans or a Target-Date field to populate.",
     }]
-    st.dataframe(pd.DataFrame(release_rows), width="stretch", hide_index=True)
-    st.info("Release dates are not present in the work-item API pull. "
-            "Add a dedicated Azure field (Target Date) or connect Pipelines to auto-populate this tab.")
+    st.dataframe(localized_frame(pd.DataFrame(release_rows)), width="stretch", hide_index=True)
+    st.info(tr(
+        "Release dates are not present in the work-item pull. Add a Target Date field or connect Azure Pipelines.",
+        "تواريخ الإصدارات غير موجودة في سحب عناصر العمل. أضف حقل Target Date أو اربط Azure Pipelines.",
+    ))
 
 
 # ============================================================ RAW DATA
 def render_raw_data():
-    st.header("📦 Raw Data — all Azure work items")
-    st.caption("All 546 imported items (incl. test artifacts), exactly as pulled from Azure DevOps.")
+    st.header(tr("Raw Data — all Azure work items", "البيانات الخام — جميع عناصر Azure"))
+    st.caption(tr(f"{len(items):,} items from the current {data_mode} source.", f"عدد {len(items):,} عنصر من مصدر البيانات الحالي."))
     all_items = items  # already loaded by the app
     df = pd.DataFrame([{
         "Work Item ID": i["id"], "Title": i["title"], "Work Item Type": i["type"],
-        "State": i["state"], "Assigned To": i["assignee"], "Iteration Path": i["sprint"],
-        "Area Path": i["area"], "Story Points": i["sp"], "Priority": i["priority"],
+        "State": i["state"], "State Category": i["state_category"],
+        "Board Column": i["board_column"], "Board Column Done": i["board_column_done"],
+        "Board Lane": i["board_lane"], "Assigned To": i["assignee"],
+        "Iteration Path": i["sprint"], "Area Path": i["area"],
+        "Story Points": i["sp"], "Priority": i["priority"],
         "Created Date": i["created"], "Changed Date": i["changed"],
         "Tags": "; ".join(i["tags"]) or "Untagged", "Parent ID": i["parent"], "Azure Link": i["url"],
     } for i in all_items])
     if not df.empty:
-        st.dataframe(df, width="stretch", hide_index=True, height=520)
+        st.dataframe(localized_frame(df), width="stretch", hide_index=True, height=520)
     else:
-        st.info("No raw data loaded. Press Refresh (requires AZDO_PAT) or supply the workbook.")
+        st.info(tr(
+            "No raw data loaded. Sync Azure DevOps or provide a workbook.",
+            "لا توجد بيانات خام. قم بمزامنة Azure DevOps أو أضف ملف البيانات.",
+        ))
 
 
 # ---- dispatch
