@@ -1,4 +1,9 @@
-"""Theme palette, Altair theming, and chart factories for the dashboard."""
+"""Theme palette, Altair theming, and chart factories for the dashboard.
+
+ACCENTS and PALETTES below are the single source of truth for every color
+used across dashboard_app.py, dashboard_styles.py, and this module. Do not
+define additional hex-literal color dicts elsewhere — import and reuse these.
+"""
 
 import altair as alt
 
@@ -11,11 +16,11 @@ ACCENTS = {
 PALETTES = {
     "dark": {
         "bg": "#0B1220", "surface": "#111A2C", "surface2": "#17233A",
-        "line": "#263349", "ink": "#F1F5F9", "muted": "#94A3B8",
+        "line": "#263349", "ink": "#F1F5F9", "muted": "#94A3B8", "muted2": "#6B7386",
     },
     "light": {
         "bg": "#F4F7FB", "surface": "#FFFFFF", "surface2": "#F8FAFC",
-        "line": "#E5EAF2", "ink": "#0F172A", "muted": "#64748B",
+        "line": "#E5EAF2", "ink": "#0F172A", "muted": "#64748B", "muted2": "#9CA3AF",
     },
 }
 
@@ -31,7 +36,13 @@ def chart_theme(mode):
     }
 
 
-def _configure(chart, theme, title=None):
+def _configure(chart, theme, title=None, legend_columns=None):
+    legend_kwargs = dict(
+        labelColor=theme["ink"], titleColor=theme["ink"],
+        strokeColor=theme["line"], orient="bottom", labelFontSize=11,
+    )
+    if legend_columns:
+        legend_kwargs.update(columns=legend_columns, labelLimit=140, symbolSize=80)
     chart = (
         chart.configure_view(stroke=None)
         .configure(background="transparent")
@@ -40,10 +51,7 @@ def _configure(chart, theme, title=None):
             gridColor=theme["line"], domainColor=theme["line"],
             labelFontSize=11, titleFontSize=12, labelFont=theme["font"],
         )
-        .configure_legend(
-            labelColor=theme["ink"], titleColor=theme["ink"],
-            strokeColor=theme["line"], orient="bottom", labelFontSize=11,
-        )
+        .configure_legend(**legend_kwargs)
         .configure_title(color=theme["ink"], fontSize=13, anchor="start")
     )
     return chart
@@ -60,13 +68,13 @@ def donut_chart(frame, field, value_field, theme, colors=None):
         encoding["color"]["scale"] = alt.Scale(domain=list(colors), range=list(colors.values()))
     else:
         encoding["color"]["scale"] = alt.Scale(range=theme["series"])
-    return _configure(base.encode(**encoding), theme)
+    return _configure(base.encode(**encoding), theme, legend_columns=2)
 
 
 def hbar_chart(frame, x_field, y_field, theme, color=None):
     chart = alt.Chart(frame).mark_bar(cornerRadius=3, height=16).encode(
         x=alt.X(f"{x_field}:Q", axis=None),
-        y=alt.Y(f"{y_field}:N", sort="-x", axis=alt.Axis(ticks=False)),
+        y=alt.Y(f"{y_field}:N", sort="-x", axis=alt.Axis(ticks=False, labelLimit=200)),
         color=alt.value(color or theme["series"][0]),
         tooltip=[alt.Tooltip(f"{y_field}:N"), alt.Tooltip(f"{x_field}:Q")],
     ).properties(height=max(140, 30 * len(frame)))
@@ -78,7 +86,7 @@ def grouped_hbar_chart(frame, y_field, columns, colors, theme):
                             var_name="metric", value_name="amount")
     chart = alt.Chart(long_frame).mark_bar(cornerRadius=2, height=9).encode(
         x=alt.X("amount:Q", axis=None),
-        y=alt.Y(f"{y_field}:N", sort="-x", axis=alt.Axis(ticks=False)),
+        y=alt.Y(f"{y_field}:N", sort="-x", axis=alt.Axis(ticks=False, labelLimit=200)),
         yOffset="metric:N",
         color=alt.Color("metric:N", scale=alt.Scale(
             domain=columns, range=[colors[key] for key in columns])),
@@ -90,7 +98,7 @@ def grouped_hbar_chart(frame, y_field, columns, colors, theme):
 def stacked_hbar_chart(frame, category_field, segment_field, amount_field, theme):
     chart = alt.Chart(frame).mark_bar(cornerRadius=2, height=18).encode(
         x=alt.X(f"{amount_field}:Q", stack="zero", axis=None),
-        y=alt.Y(f"{category_field}:N", axis=alt.Axis(ticks=False)),
+        y=alt.Y(f"{category_field}:N", axis=alt.Axis(ticks=False, labelLimit=200)),
         color=alt.Color(f"{segment_field}:N", scale=alt.Scale(range=theme["series"])),
         tooltip=[category_field, segment_field, alt.Tooltip(f"{amount_field}:Q")],
     ).properties(height=max(150, 40 * frame[category_field].nunique()))

@@ -41,18 +41,6 @@ DEV_TYPES = set(DELIVERY_TYPES)
 STALE_DAYS = 14
 PB = "Product Backlog"  # project-only iteration label
 
-C = {
-    "green": "#25A66A",
-    "amber": "#F4B942",
-    "red": "#E85D5D",
-    "navy": "#17243B",
-    "blue": "#2F75B5",
-    "cyan": "#23A6D5",
-    "purple": "#7057D9",
-    "light": "#F5F7FB",
-    "mut": "#64748B",
-}
-
 
 # ---------------------------------------------------------------- data layer
 def _leaf(path):
@@ -457,10 +445,10 @@ def ribbon(scope, task, unassigned, stale):
     if stale and stale >= 10:
         red += 1
     if red >= 3:
-        return "CRITICAL", C["red"]
+        return "CRITICAL", dashboard_theme.ACCENTS["red"]
     if red >= 2:
-        return "AT RISK", C["amber"]
-    return "HEALTHY", C["green"]
+        return "AT RISK", dashboard_theme.ACCENTS["amber"]
+    return "HEALTHY", dashboard_theme.ACCENTS["green"]
 
 
 def delivery_action(items, unassigned):
@@ -494,13 +482,14 @@ def theme_chart(chart):
     return chart
 
 
-def kpi_card(column, label, value, accent):
+def kpi_card(column, label, value, accent, icon="◆", subcaption=None):
     with column:
+        sub_html = f"<div class='kpi-sub'>{subcaption}</div>" if subcaption else ""
         st.markdown(
             f"<div class='kpi-card' style='--accent:{accent}'>"
             f"<div class='kpi-card-top'><span class='kpi-label'>{label}</span>"
-            "<span class='kpi-icon'>◆</span></div>"
-            f"<div class='kpi-value'>{value}</div></div>",
+            f"<span class='kpi-icon'>{icon}</span></div>"
+            f"<div class='kpi-value'>{value}</div>{sub_html}</div>",
             unsafe_allow_html=True,
         )
 
@@ -547,11 +536,7 @@ is_ar = st.session_state.get("language_selector", "العربية") == "العر
 theme_mode = "dark" if st.session_state.get("theme_selector", "Dark") == "Dark" else "light"
 apply_theme(theme_mode, is_ar)
 chart_theme = dashboard_theme.chart_theme(theme_mode)
-ACCENT = {
-    "green": "#10B981", "blue": "#3B82F6", "purple": "#8B5CF6",
-    "red": "#EF4444", "gold": "#CA8A04", "orange": "#F59E0B",
-    "teal": "#14B8A6", "pink": "#EC4899",
-}
+ACCENT = dashboard_theme.ACCENTS
 
 st.sidebar.markdown(
     """
@@ -676,17 +661,47 @@ PAGES = {
     "Releases": ("🚩  Releases", "🚩  الإصدارات"),
     "Raw Data": ("▤  Raw data", "▤  البيانات الخام"),
 }
-st.sidebar.markdown(
-    f'<div class="sidebar-label">{tr("CORE OPERATIONS", "العمليات الأساسية")}</div>',
-    unsafe_allow_html=True,
-)
-page = st.sidebar.radio(
-    tr("Sections", "الأقسام"),
-    list(PAGES),
-    format_func=lambda key: PAGES[key][1 if is_ar else 0],
-    key="dashboard_page",
-    label_visibility="collapsed",
-)
+# Grouped purely for sidebar presentation — every PAGES key appears in exactly
+# one group. Streamlit has no native nested/grouped radio, so each group is
+# its own st.sidebar.radio; selecting any of them writes the shared
+# "dashboard_page" key that the dispatch block below reads.
+PAGE_GROUPS = [
+    (("Overview", "نظرة عامة"), ["Executive Dashboard", "Sprint Summary", "Sprint Board"]),
+    (("Delivery & Team", "التسليم والفريق"), ["Tag Analysis", "Team Analysis", "Area Analysis", "Active Now"]),
+    (("Quality & Risk", "الجودة والمخاطر"), ["Risks & Aging", "Data Quality"]),
+    (("Data & Repositories", "البيانات والمستودعات"), ["Repository Intelligence", "Releases", "Raw Data"]),
+]
+assert sorted(sum((keys for _, keys in PAGE_GROUPS), [])) == sorted(PAGES), \
+    "PAGE_GROUPS must partition PAGES exactly"
+
+if "dashboard_page" not in st.session_state:
+    st.session_state["dashboard_page"] = next(iter(PAGES))
+
+
+def _sync_dashboard_page(group_key):
+    st.session_state["dashboard_page"] = st.session_state[group_key]
+
+
+for (label_en, label_ar), group_keys in PAGE_GROUPS:
+    st.sidebar.markdown(
+        f'<div class="sidebar-label">{tr(label_en, label_ar)}</div>',
+        unsafe_allow_html=True,
+    )
+    group_key = f"nav_group_{label_en}"
+    current = st.session_state["dashboard_page"]
+    if group_key not in st.session_state:
+        st.session_state[group_key] = current if current in group_keys else group_keys[0]
+    st.sidebar.radio(
+        label_en,
+        group_keys,
+        format_func=lambda key: PAGES[key][1 if is_ar else 0],
+        key=group_key,
+        label_visibility="collapsed",
+        on_change=_sync_dashboard_page,
+        args=(group_key,),
+    )
+
+page = st.session_state["dashboard_page"]
 st.sidebar.markdown(
     f'<div class="sidebar-label">{tr("SCOPE SNAPSHOT", "ملخص النطاق")}</div>',
     unsafe_allow_html=True,
@@ -729,13 +744,19 @@ def render_executive():
         return
 
     columns = st.columns(6)
-    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"])
-    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"])
-    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"])
-    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"])
+    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"],
+              icon="%", subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
+    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"],
+              icon="✓", subcaption=tr(f"{scope['tasks_done']} of {scope['tasks']} tasks", f"{scope['tasks_done']} من {scope['tasks']} مهمة"))
+    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"],
+              icon="⚡", subcaption=tr("items in progress", "عنصر نشط الآن"))
+    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"],
+              icon="!", subcaption=tr("tasks need an owner", "مهمة تحتاج تعيين"))
     backlog_count = sum(1 for item in dev if item["sprint"] == PB)
-    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"])
-    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["orange"])
+    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"],
+              icon="▤", subcaption=tr("items with no sprint", "عنصر بدون سبرينت"))
+    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["amber"],
+              icon="⏱", subcaption=tr("no delay" if not all_m["stale"] else "needs attention", "لا يوجد تأخير" if not all_m["stale"] else "يحتاج متابعة"))
 
     section_header(
         "Completion by work type",
@@ -761,14 +782,10 @@ def render_executive():
             localized_frame(prog_df), width="stretch", hide_index=True,
             column_config={
                 **percentage_columns("Completion %"),
-                localized_label("Total"): st.column_config.ProgressColumn(
-                    localized_label("Total"), min_value=0,
-                    max_value=max(1, int(prog_df["Total"].max())),
-                ),
-                localized_label("Done"): st.column_config.ProgressColumn(
-                    localized_label("Done"), min_value=0,
-                    max_value=max(1, int(prog_df["Done"].max())),
-                ),
+                localized_label("Total"): st.column_config.NumberColumn(
+                    localized_label("Total"), format="%d"),
+                localized_label("Done"): st.column_config.NumberColumn(
+                    localized_label("Done"), format="%d"),
             },
         )
     hier_txt = tr(
@@ -970,7 +987,7 @@ def render_team_analysis():
     st.caption(tr("Team contribution is measured through completed Tasks.", "تُقاس مساهمة أعضاء الفريق من خلال المهام المكتملة."))
     team = team_df()
     if not team.empty:
-        chart_col, table_col = st.columns([1, 1.35])
+        chart_col, table_col = st.columns([1.4, 1])
         with chart_col:
             section_header("Tasks per member", "المهام لكل عضو", "◎")
             member_load = team.rename(columns={"Assignee": "member", "Tasks": "tasks"})[
@@ -1014,7 +1031,7 @@ def render_area_analysis():
     st.caption(tr("Scope and execution across Azure Area Paths.", "توزيع النطاق والتنفيذ حسب مسارات Azure."))
     areas = area_df()
     if not areas.empty:
-        chart_col, table_col = st.columns([1, 1.35])
+        chart_col, table_col = st.columns([1.4, 1])
         with chart_col:
             section_header("Delivery items per area", "عناصر التسليم لكل مجال", "◇")
             area_load = areas.rename(columns={"Area": "area", "Total": "total"})[
@@ -1228,19 +1245,19 @@ def _filtered_repository_activity(activity, filter_values):
 def _render_repository_kpis(activity):
     columns = st.columns(6)
     values = (
-        (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"]),
-        (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"]),
-        ("Commits", len(activity["commits"]), ACCENT["green"]),
-        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), ACCENT["teal"]),
-        ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"]),
-        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"]),
+        (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"], "⌘"),
+        (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"], "◎"),
+        ("Commits", len(activity["commits"]), ACCENT["green"], "✓"),
+        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), ACCENT["teal"], "↻"),
+        ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"], "⌥"),
+        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"], "▤"),
     )
-    for column, (label, value, accent) in zip(columns, values):
-        kpi_card(column, label, value, accent)
+    for column, (label, value, accent, icon) in zip(columns, values):
+        kpi_card(column, label, value, accent, icon=icon)
 
 
 def _render_repository_tables(activity, failures):
-    chart_col, table_col = st.columns([1, 1.3])
+    chart_col, table_col = st.columns([1.4, 1])
     with chart_col:
         section_header("Commits per contributor", "Commits لكل مساهم", "⌘")
         if activity["contributors"]:
