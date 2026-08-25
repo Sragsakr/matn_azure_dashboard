@@ -8,19 +8,19 @@ define additional hex-literal color dicts elsewhere — import and reuse these.
 import altair as alt
 
 ACCENTS = {
-    "blue": "#3B82F6", "green": "#10B981", "purple": "#8B5CF6",
-    "amber": "#F59E0B", "red": "#EF4444", "teal": "#14B8A6",
-    "pink": "#EC4899", "gold": "#CA8A04", "indigo": "#6366F1",
+    "blue": "#1D4ED8", "green": "#047857", "purple": "#6D28D9",
+    "amber": "#B45309", "red": "#B91C1C", "teal": "#0F766E",
+    "pink": "#BE185D", "gold": "#A16207", "indigo": "#4338CA",
 }
 
 PALETTES = {
     "dark": {
-        "bg": "#0B1220", "surface": "#111A2C", "surface2": "#17233A",
-        "line": "#263349", "ink": "#F1F5F9", "muted": "#94A3B8", "muted2": "#6B7386",
+        "bg": "#0C0E12", "surface": "#15181F", "surface2": "#1A1E27",
+        "line": "#282D38", "ink": "#E8EAF0", "muted": "#9297A6", "muted2": "#5F6472",
     },
     "light": {
-        "bg": "#F4F7FB", "surface": "#FFFFFF", "surface2": "#F8FAFC",
-        "line": "#E5EAF2", "ink": "#0F172A", "muted": "#64748B", "muted2": "#9CA3AF",
+        "bg": "#EFF1F4", "surface": "#FFFFFF", "surface2": "#F5F6F9",
+        "line": "#DADEE6", "ink": "#1A1D24", "muted": "#5B6070", "muted2": "#8B90A0",
     },
 }
 
