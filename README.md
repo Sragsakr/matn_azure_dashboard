@@ -9,6 +9,7 @@ A professional, re-runnable Azure DevOps delivery analytics workbook.
    - **Sprint Summary** — one row per real iteration (Product Backlog separately).
    - **Sprint Board** — every dev work item explorer with Azure links.
    - **Tag Analysis**, **Area Analysis**, **Active Now**, **Risks & Aging**, **Data Quality**, **Releases**.
+   - **Repository Intelligence** — all Azure Repos, contributors, commits, pushes, pull requests, and changed files with full-history filters.
 3. Honours the real hierarchy: a User Story only counts Done when **all** its linked Tasks are Done. Feature/Epic roll up the same way.
 4. Team analysis is **task-centric** — a story is rarely owned by one person; each member is credited through the Tasks they made Done.
 
@@ -22,7 +23,7 @@ python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ```
 
-Create a **read-only** Azure DevOps PAT (Work Items → Read) and set it ONLY as an environment variable — never in any file:
+Create a **read-only** Azure DevOps PAT (Work Items → Read + Code → Read) and set it ONLY as an environment variable — never in any file:
 
 ```bash
 export AZDO_PAT="your-read-only-token"
@@ -51,7 +52,7 @@ that pulls fresh data from Azure DevOps.
 Hugging Face Spaces hosts Streamlit apps free and keeps them running (does not sleep),
 so your **Refresh-from-Azure button works live**. Sync this repo into a Space:
 
-1. Create a **read-only** Azure DevOps PAT (Work Items → Read).
+1. Create a **read-only** Azure DevOps PAT (Work Items → Read + Code → Read).
 2. Go to [huggingface.co/spaces](https://huggingface.co/spaces) → **Create new Space**.
 3. SDK: **Streamlit**. (Optionally link your GitHub repo, or upload these files.)
 4. Before running, the Space needs the secret: in the Space **Settings → Variables and secrets**,
@@ -66,7 +67,7 @@ so your **Refresh-from-Azure button works live**. Sync this repo into a Space:
 Render also runs the Streamlit app as a live public web service from this repo —
 no GitHub Pages involved. It picks up the included `render.yaml` automatically.
 
-1. Create a **read-only** Azure DevOps PAT (Work Items → Read).
+1. Create a **read-only** Azure DevOps PAT (Work Items → Read + Code → Read).
 2. On [render.com](https://render.com) sign up with GitHub, then **New + → Web Service**.
 3. Pick the `matn_azure_dashboard` repo. Render auto-detects `render.yaml`.
 4. In **Environment**, add key `AZDO_PAT` = your PAT (a secret, never committed).
