@@ -129,6 +129,45 @@ _ICONS = {
         '<line x1="9.5" y1="12" x2="14.5" y2="12"/>'
         '<line x1="9.5" y1="15.5" x2="14.5" y2="15.5"/>'
     ),
+    # Phase 5 (Sprint Board Kanban): work-item-type glyphs for board cards.
+    # Distinct silhouettes (not just recolored duplicates) so cards stay
+    # scannable at a glance, matching the existing stroke/Lucide visual
+    # language (24x24 viewBox, currentColor stroke, no fill).
+    # ⬥ — Epic (large diamond, mirrors "executive"/"area" outer shape)
+    "epic": (
+        '<path d="M12 2 L22 12 L12 22 L2 12 Z"/>'
+        '<path d="M12 2 L12 22 M2 12 L22 12"/>'
+    ),
+    # ⚑ — Feature (flag)
+    "feature": (
+        '<path d="M5 21V4"/>'
+        '<path d="M5 4h13l-3 4.5L18 13H5"/>'
+    ),
+    # ▭ — User Story (bookmark/index card)
+    "story": (
+        '<rect x="4" y="3" width="16" height="18" rx="1.5"/>'
+        '<line x1="7.5" y1="8" x2="16.5" y2="8"/>'
+        '<line x1="7.5" y1="12" x2="16.5" y2="12"/>'
+        '<line x1="7.5" y1="16" x2="13" y2="16"/>'
+    ),
+    # ☐ — Task (checkbox)
+    "task": (
+        '<rect x="3" y="3" width="18" height="18" rx="2"/>'
+        '<polyline points="7 12 10.5 15.5 17 8.5"/>'
+    ),
+    # ⬤ — Bug (bug body with legs)
+    "bug": (
+        '<rect x="8" y="7" width="8" height="11" rx="4"/>'
+        '<line x1="12" y1="3" x2="12" y2="7"/>'
+        '<line x1="9" y1="4.5" x2="10.5" y2="7"/>'
+        '<line x1="15" y1="4.5" x2="13.5" y2="7"/>'
+        '<line x1="4" y1="10" x2="8" y2="10.5"/>'
+        '<line x1="4" y1="14" x2="8" y2="14"/>'
+        '<line x1="4" y1="18" x2="8" y2="16.5"/>'
+        '<line x1="20" y1="10" x2="16" y2="10.5"/>'
+        '<line x1="20" y1="14" x2="16" y2="14"/>'
+        '<line x1="20" y1="18" x2="16" y2="16.5"/>'
+    ),
 }
 
 
