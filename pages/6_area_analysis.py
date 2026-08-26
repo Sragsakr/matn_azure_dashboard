@@ -50,4 +50,7 @@ if not areas.empty:
             config={"displaylogo": False},
         )
 else:
-    st.dataframe(localized_frame(areas), width="stretch", hide_index=True)
+    st.info(tr(
+        "No area data matches the current filters.",
+        "لا توجد بيانات مجال مطابقة للفلاتر الحالية.",
+    ))

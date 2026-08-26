@@ -30,22 +30,28 @@ percentage_columns = lambda *names: _ui_percentage_columns(*names, is_ar=is_ar)
 st.header(tr("Sprint Summary", "ملخص السبرينت"))
 st.caption(tr("One row per Azure iteration; Product Backlog is shown separately.", "صف لكل دورة Azure مع عرض Product Backlog بشكل منفصل."))
 summary = _sprint_summary_df(dev)
-chart_col, table_col = st.columns([1, 1.25])
-with chart_col:
-    section_header("Stories done vs total", "القصص المكتملة مقابل الإجمالي", icon_svg("hourglass"))
-    story_chart = summary.rename(columns={
-        "Iteration": "iteration", "Stories Done": "done", "User Stories": "total",
-    })
-    st.plotly_chart(
-        plotly_charts.grouped_hbar_chart(
-            story_chart, "iteration", ("done", "total"),
-            {"done": ACCENT["green"], "total": ACCENT["blue"]}, chart_theme,
-        ),
-        width="stretch",
-        config={"displaylogo": False},
-    )
-with table_col:
-    st.dataframe(
-        localized_frame(summary), width="stretch", hide_index=True,
-        column_config=percentage_columns("Scope Done %", "Task Done %"),
-    )
+if summary.empty:
+    st.info(tr(
+        "No sprint data matches the current filters.",
+        "لا توجد بيانات سبرينت مطابقة للفلاتر الحالية.",
+    ))
+else:
+    chart_col, table_col = st.columns([1, 1.25])
+    with chart_col:
+        section_header("Stories done vs total", "القصص المكتملة مقابل الإجمالي", icon_svg("hourglass"))
+        story_chart = summary.rename(columns={
+            "Iteration": "iteration", "Stories Done": "done", "User Stories": "total",
+        })
+        st.plotly_chart(
+            plotly_charts.grouped_hbar_chart(
+                story_chart, "iteration", ("done", "total"),
+                {"done": ACCENT["green"], "total": ACCENT["blue"]}, chart_theme,
+            ),
+            width="stretch",
+            config={"displaylogo": False},
+        )
+    with table_col:
+        st.dataframe(
+            localized_frame(summary), width="stretch", hide_index=True,
+            column_config=percentage_columns("Scope Done %", "Task Done %"),
+        )

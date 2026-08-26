@@ -316,6 +316,29 @@ if "azure_items" not in st.session_state:
 
 items = st.session_state["azure_items"]
 data_mode = st.session_state["azure_data_mode"]
+
+# Phase 6: a pull failure used to surface only as a small st.sidebar.error,
+# easy to miss since the sidebar isn't always in view (especially once
+# collapsed on narrow screens). Mirror the same failure as a full-width
+# banner in the main content area, directly under the header, so it's
+# visible regardless of sidebar state — on every rerun while the failure
+# is current, not just immediately after the user clicks Refresh.
+if data_mode != "live" and st.session_state.get("last_pull_error"):
+    st.error(
+        tr(
+            "⚠ Azure DevOps sync failed — showing the last saved snapshot instead.",
+            "⚠ فشلت مزامنة Azure DevOps — يتم عرض آخر نسخة محفوظة بدلاً من ذلك.",
+        )
+        + f"\n\n`{st.session_state['last_pull_error']}`\n\n"
+        + tr(
+            "**What to try:** confirm `AZDO_PAT` is set and has not expired, then press "
+            "**↻ Sync Azure DevOps** in the sidebar to retry.",
+            "**للمحاولة:** تأكد من ضبط `AZDO_PAT` وأنه لم تنتهِ صلاحيته، ثم اضغط "
+            "**↻ مزامنة Azure DevOps** في الشريط الجانبي لإعادة المحاولة.",
+        ),
+        icon="🚨",
+    )
+
 if refresh:
     if data_mode == "live":
         st.sidebar.success(tr(

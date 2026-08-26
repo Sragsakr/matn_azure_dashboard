@@ -45,4 +45,7 @@ for i in ordered:
         "Sprint": i["sprint"], "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
         "Azure Link": i["url"],
     })
-render_grid(localized_frame(pd.DataFrame(rows)), items=ordered, height=500, key="risks_aging_grid")
+if rows:
+    render_grid(localized_frame(pd.DataFrame(rows)), items=ordered, height=500, key="risks_aging_grid")
+else:
+    st.success(tr("No open work — nothing at risk right now.", "لا يوجد عمل مفتوح — لا توجد مخاطر حاليًا."))

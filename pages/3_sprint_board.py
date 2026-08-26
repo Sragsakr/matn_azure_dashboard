@@ -59,6 +59,11 @@ view = st.radio(
 
 if view == "kanban":
     render_kanban(dev, is_ar=is_ar, accents=accents, key="sprint_board_kanban")
+elif not dev:
+    st.info(tr(
+        "No items match the current filters. Adjust or clear them above.",
+        "لا توجد عناصر مطابقة للفلاتر الحالية. عدّلها أو امسحها أعلاه.",
+    ))
 else:
     df = pd.DataFrame([{
         "Iteration": i["sprint"], "ID": i["id"], "Title": i["title"], "Type": i["type"],

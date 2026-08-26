@@ -150,7 +150,8 @@ def _filtered_repository_activity(activity, filter_values):
 
 
 def _render_repository_kpis(activity):
-    columns = st.columns(6, gap="small")
+    # Phase 6: fixed 2-row x 3-column KPI grid (same rationale as the
+    # Executive Dashboard) instead of a single cramped 6-across row.
     values = (
         (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"], "repo"),
         (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"], "contributor"),
@@ -159,6 +160,9 @@ def _render_repository_kpis(activity):
         ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"], "pull-request"),
         (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"], "files"),
     )
+    row1 = st.columns(3, gap="small")
+    row2 = st.columns(3, gap="small")
+    columns = row1 + row2
     for column, (label, value, accent, icon) in zip(columns, values):
         kpi_card(column, label, value, accent, icon=icon_svg(icon))
 

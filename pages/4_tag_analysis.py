@@ -51,10 +51,15 @@ for tag, members in sorted(tag_map.items(), key=lambda x: -len(x[1])):
         "Areas": ", ".join(sorted({i["area"] for i in members})),
     })
 tag_frame = pd.DataFrame(rows)
-chart_col, table_col = st.columns([1, 1.3])
-with chart_col:
-    section_header("Items per tag", "العناصر لكل وسم", icon_svg("tag"))
-    if not tag_frame.empty:
+if tag_frame.empty:
+    st.info(tr(
+        "No tagged items match the current filters.",
+        "لا توجد عناصر موسومة مطابقة للفلاتر الحالية.",
+    ))
+else:
+    chart_col, table_col = st.columns([1, 1.3])
+    with chart_col:
+        section_header("Items per tag", "العناصر لكل وسم", icon_svg("tag"))
         tag_counts = tag_frame.rename(columns={"Tag": "tag", "Items": "items"})[
             ["tag", "items"]
         ]
@@ -65,8 +70,8 @@ with chart_col:
             width="stretch",
             config={"displaylogo": False},
         )
-with table_col:
-    st.dataframe(
-        localized_frame(tag_frame), width="stretch", hide_index=True,
-        column_config=percentage_columns("Scope %", "Task %"),
-    )
+    with table_col:
+        st.dataframe(
+            localized_frame(tag_frame), width="stretch", hide_index=True,
+            column_config=percentage_columns("Scope %", "Task %"),
+        )

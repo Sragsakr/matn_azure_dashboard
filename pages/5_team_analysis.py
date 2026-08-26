@@ -76,4 +76,7 @@ if not team.empty:
             config={"displaylogo": False},
         )
 else:
-    st.dataframe(localized_frame(team), width="stretch", hide_index=True)
+    st.info(tr(
+        "No team activity matches the current filters.",
+        "لا يوجد نشاط فريق مطابق للفلاتر الحالية.",
+    ))

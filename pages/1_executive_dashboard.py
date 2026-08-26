@@ -67,19 +67,25 @@ st.markdown(
 if not dev:
     st.warning(tr("No work items to chart yet.", "لا توجد عناصر عمل لعرضها."))
 else:
-    columns = st.columns(6, gap="small")
-    kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"],
-              icon=icon_svg("percent"), subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
-    kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"],
-              icon=icon_svg("check"), subcaption=tr(f"{scope['tasks_done']} of {scope['tasks']} tasks", f"{scope['tasks_done']} من {scope['tasks']} مهمة"))
-    kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"],
-              icon=icon_svg("active"), subcaption=tr("items in progress", "عنصر نشط الآن"))
-    kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"],
-              icon=icon_svg("warning"), subcaption=tr("tasks need an owner", "مهمة تحتاج تعيين"))
+    # Phase 6: fixed 2-row x 3-column KPI grid instead of a single 6-across
+    # row. Streamlit's st.columns doesn't reflow at narrow viewports (columns
+    # just shrink in place), so a single row of 6 becomes unreadably cramped
+    # on mobile. Two rows of 3 "always looks intentional" (per the brief)
+    # without needing any JS-based viewport detection.
     backlog_count = sum(1 for item in dev if item["sprint"] == PB)
-    kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"],
+    row1 = st.columns(3, gap="small")
+    kpi_card(row1[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"],
+              icon=icon_svg("percent"), subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
+    kpi_card(row1[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"],
+              icon=icon_svg("check"), subcaption=tr(f"{scope['tasks_done']} of {scope['tasks']} tasks", f"{scope['tasks_done']} من {scope['tasks']} مهمة"))
+    kpi_card(row1[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"],
+              icon=icon_svg("active"), subcaption=tr("items in progress", "عنصر نشط الآن"))
+    row2 = st.columns(3, gap="small")
+    kpi_card(row2[0], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"],
+              icon=icon_svg("warning"), subcaption=tr("tasks need an owner", "مهمة تحتاج تعيين"))
+    kpi_card(row2[1], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"],
               icon=icon_svg("folder"), subcaption=tr("items with no sprint", "عنصر بدون سبرينت"))
-    kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["amber"],
+    kpi_card(row2[2], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["amber"],
               icon=icon_svg("clock"), subcaption=tr("no delay" if not all_m["stale"] else "needs attention", "لا يوجد تأخير" if not all_m["stale"] else "يحتاج متابعة"))
 
     section_header(
