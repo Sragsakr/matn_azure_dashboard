@@ -41,7 +41,7 @@ A browser dashboard that renders the same analysis live and has a **Refresh** bu
 that pulls fresh data from Azure DevOps.
 
 ```bash
-./.venv/bin/streamlit run dashboard_app.py
+./.venv/bin/streamlit run app.py
 ```
 
 - Open http://localhost:8501
@@ -57,7 +57,7 @@ so your **Refresh-from-Azure button works live**. Sync this repo into a Space:
 3. SDK: **Streamlit**. (Optionally link your GitHub repo, or upload these files.)
 4. Before running, the Space needs the secret: in the Space **Settings → Variables and secrets**,
    add key `AZDO_PAT` = your PAT.
-5. The app auto-loads `dashboard_app.py` and the in-app **"Refresh from Azure DevOps"**
+5. The app auto-loads `app.py` and the in-app **"Refresh from Azure DevOps"**
    button pulls live data on demand.
 
 > The PAT is stored only as a Space secret — never in the repo.

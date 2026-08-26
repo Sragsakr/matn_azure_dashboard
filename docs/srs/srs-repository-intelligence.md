@@ -5,7 +5,7 @@ BRD-OBJ-REPO-1 -> REQ-REPO-1..6 -> AC-REPO-1..7 -> SRS-REPO-1..6.
 
 ## Architecture
 - New pure module `azure_repo_activity.py` owns Azure Git REST pagination, normalization, aggregation, and failure records.
-- `dashboard_app.py` owns Streamlit state, bilingual presentation, filters, and progress/error states.
+- `app.py` and `pages/10_repository_intelligence.py` own Streamlit state, bilingual presentation, filters, and progress/error states.
 - Dependency direction: UI -> repo activity module -> `requests.Session` -> Azure REST API.
 - No storage migration. Results are held in Streamlit session state only.
 
