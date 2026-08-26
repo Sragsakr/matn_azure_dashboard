@@ -86,6 +86,49 @@ _ICONS = {
         '<circle cx="19" cy="19.5" r="2"/>'
         '<path d="M12 6.5 V12 M12 12 L5 17.5 M12 12 L19 17.5"/>'
     ),
+    # Phase 3 (11-page rollout): icons for section_header()/kpi_card() glyphs
+    # used across pages/2..12 that weren't covered by the Executive
+    # Dashboard's own set above.
+    # ◷ — Sprint Summary "stories done vs total" section
+    "hourglass": (
+        '<circle cx="12" cy="12" r="9"/>'
+        '<path d="M12 7 A5 5 0 0 1 12 12 A5 5 0 0 1 12 17"/>'
+    ),
+    # ◎ — Team Analysis "tasks per member", repo Contributors KPI
+    "contributor": (
+        '<circle cx="12" cy="8" r="4"/>'
+        '<circle cx="12" cy="12" r="9"/>'
+    ),
+    # ⌘ — Repository Intelligence Repositories KPI / commits-per-contributor
+    "repo": (
+        '<path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5"/>'
+        '<path d="M6 3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2"/>'
+        '<line x1="9" y1="8" x2="15" y2="8"/>'
+        '<line x1="9" y1="12" x2="15" y2="12"/>'
+    ),
+    # ↻ — Repository Intelligence Pushes KPI / reload button
+    "refresh": (
+        '<path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/>'
+        '<path d="M21 3v5h-5"/>'
+        '<path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/>'
+        '<path d="M3 21v-5h5"/>'
+    ),
+    # ⌥ — Repository Intelligence Pull Requests KPI / PR outcomes section
+    "pull-request": (
+        '<circle cx="6" cy="6" r="2.2"/>'
+        '<circle cx="6" cy="18" r="2.2"/>'
+        '<circle cx="18" cy="6" r="2.2"/>'
+        '<path d="M6 8.2V15.8"/>'
+        '<path d="M18 8.2v3.3a4 4 0 0 1-4 4h-2.5"/>'
+        '<path d="M14 12.5l-2.5 2.5 2.5 2.5"/>'
+    ),
+    # ▤ — Repository Intelligence Changed files KPI
+    "files": (
+        '<path d="M8 3h6l4 4v12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/>'
+        '<path d="M14 3v4h4"/>'
+        '<line x1="9.5" y1="12" x2="14.5" y2="12"/>'
+        '<line x1="9.5" y1="15.5" x2="14.5" y2="15.5"/>'
+    ),
 }
 
 

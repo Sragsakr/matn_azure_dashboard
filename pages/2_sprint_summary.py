@@ -8,8 +8,9 @@ restructure — structural move only, no behavior/styling changes).
 
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
+from components.icons import icon_svg
+from components import charts as plotly_charts
 from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
@@ -31,14 +32,18 @@ st.caption(tr("One row per Azure iteration; Product Backlog is shown separately.
 summary = _sprint_summary_df(dev)
 chart_col, table_col = st.columns([1, 1.25])
 with chart_col:
-    section_header("Stories done vs total", "القصص المكتملة مقابل الإجمالي", "◷")
+    section_header("Stories done vs total", "القصص المكتملة مقابل الإجمالي", icon_svg("hourglass"))
     story_chart = summary.rename(columns={
         "Iteration": "iteration", "Stories Done": "done", "User Stories": "total",
     })
-    st.altair_chart(dashboard_theme.grouped_hbar_chart(
-        story_chart, "iteration", ("done", "total"),
-        {"done": ACCENT["green"], "total": ACCENT["blue"]}, chart_theme,
-    ), width="stretch")
+    st.plotly_chart(
+        plotly_charts.grouped_hbar_chart(
+            story_chart, "iteration", ("done", "total"),
+            {"done": ACCENT["green"], "total": ACCENT["blue"]}, chart_theme,
+        ),
+        width="stretch",
+        config={"displaylogo": False},
+    )
 with table_col:
     st.dataframe(
         localized_frame(summary), width="stretch", hide_index=True,

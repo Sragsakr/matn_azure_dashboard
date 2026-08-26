@@ -11,6 +11,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+from components.grid import render_grid
 from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 
 ctx = st.session_state["app_ctx"]
@@ -32,4 +33,4 @@ df = pd.DataFrame([{
     "Age (d)": (dt.date.today() - i["created"]).days if i["created"] else None,
     "Parent ID": i["parent"], "Azure Link": i["url"],
 } for i in dev])
-st.dataframe(localized_frame(df), width="stretch", hide_index=True, height=500)
+render_grid(localized_frame(df), items=dev, height=500, key="sprint_board_grid")

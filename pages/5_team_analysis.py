@@ -8,8 +8,9 @@ only, no behavior/styling changes).
 
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
+from components.icons import icon_svg
+from components import charts as plotly_charts
 from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
@@ -37,13 +38,17 @@ if not team.empty:
             column_config=percentage_columns("Task Completion %"),
         )
     with chart_col:
-        section_header("Tasks per member", "المهام لكل عضو", "◎")
+        section_header("Tasks per member", "المهام لكل عضو", icon_svg("contributor"))
         member_load = team.rename(columns={"Assignee": "member", "Tasks": "tasks"})[
             ["member", "tasks"]
         ]
-        st.altair_chart(dashboard_theme.hbar_chart(
-            member_load, "tasks", "member", chart_theme,
-            color=ACCENT["purple"],
-        ), width="stretch")
+        st.plotly_chart(
+            plotly_charts.hbar_chart(
+                member_load, "tasks", "member", chart_theme,
+                color=ACCENT["purple"],
+            ),
+            width="stretch",
+            config={"displaylogo": False},
+        )
 else:
     st.dataframe(localized_frame(team), width="stretch", hide_index=True)

@@ -292,6 +292,77 @@ def _hex_to_rgba(hex_color, alpha):
     return f"rgba({r},{g},{b},{alpha})"
 
 
+def generic_donut(frame, field, value_field, theme, colors=None):
+    """Generic labeled-value donut (Plotly equivalent of
+    dashboard_theme.donut_chart) for pages whose data isn't shaped like
+    the Executive Dashboard's prog_df (e.g. Repository Intelligence's PR
+    outcomes by status)."""
+    color_seq = [colors.get(v, theme["series"][0]) for v in frame[field]] if colors else None
+    fig = go.Figure(
+        go.Pie(
+            labels=frame[field],
+            values=frame[value_field],
+            hole=0.55,
+            marker=dict(colors=color_seq, line=dict(color=theme["bg"], width=2)) if color_seq
+            else dict(line=dict(color=theme["bg"], width=2)),
+            hovertemplate=f"<b>%{{label}}</b><br>{value_field}: %{{value}}<extra></extra>",
+            sort=False,
+        )
+    )
+    fig.update_layout(**_base_layout(theme, height=300))
+    return fig
+
+
+def hbar_chart(frame, x_field, y_field, theme, color=None):
+    """Single-series horizontal bar (Plotly equivalent of
+    dashboard_theme.hbar_chart) — items-per-tag, tasks-per-member,
+    items-per-area, commits-per-contributor, etc."""
+    ordered = frame.sort_values(x_field, ascending=True)
+    fig = go.Figure(
+        go.Bar(
+            x=ordered[x_field], y=ordered[y_field], orientation="h",
+            marker=dict(color=color or ACCENT["blue"]),
+            customdata=ordered[[y_field, x_field]].to_numpy(),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                f"{x_field}: " "%{customdata[1]}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    fig.update_layout(**_base_layout(theme, height=max(140, 30 * len(ordered)), legend=False))
+    fig.update_xaxes(title=None, showgrid=True, gridcolor=theme["line"], zeroline=False)
+    fig.update_yaxes(title=None, showgrid=False)
+    return fig
+
+
+def grouped_hbar_chart(frame, y_field, columns, colors, theme):
+    """Grouped (offset) horizontal bar for two side-by-side series per
+    category (Plotly equivalent of dashboard_theme.grouped_hbar_chart) —
+    Sprint Summary's "stories done vs total" chart."""
+    long_frame = frame.melt(id_vars=[y_field], value_vars=list(columns),
+                             var_name="metric", value_name="amount")
+    fig = px.bar(
+        long_frame, x="amount", y=y_field, color="metric",
+        orientation="h", barmode="group",
+        color_discrete_map={key: colors[key] for key in columns},
+        custom_data=[y_field, "metric", "amount"],
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "%{customdata[1]}: %{customdata[2]}"
+            "<extra></extra>"
+        ),
+        marker_line_width=0,
+    )
+    fig.update_layout(**_base_layout(theme, height=max(160, 34 * len(frame))))
+    fig.update_xaxes(title=None, showgrid=True, gridcolor=theme["line"], zeroline=False)
+    fig.update_yaxes(title=None, showgrid=False, categoryorder="total ascending")
+    fig.update_layout(legend_title_text="")
+    return fig
+
+
 def momentum_area(week_frame, theme, colors=None):
     """Created vs. Closed weekly trend area chart
     (Plotly equivalent of dashboard_theme.area_trend_chart)."""

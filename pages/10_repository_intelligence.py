@@ -13,10 +13,13 @@ import pandas as pd
 import requests
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
+from components.icons import icon_svg
+from components.kpi_card import kpi_card
+from components.grid import render_grid
+from components import charts as plotly_charts
 from core.analysis import ORG, PROJECT
-from core.ui_helpers import kpi_card, pat as _pat
+from core.ui_helpers import pat as _pat
 from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from azure_repo_activity import AzureRepoActivityClient, contributor_rows
 
@@ -43,11 +46,15 @@ def _activity_table(title_en, title_ar, rows, height=420):
     if not rows:
         st.info(tr("No matching records.", "لا توجد سجلات مطابقة."))
         return
-    st.dataframe(
+    # Commit/PR/push/file-change rows are repository activity, not work
+    # items — no `items=` staleness tinting here (STALE_DAYS is a
+    # work-item concept keyed off `created`/`state_category`, which these
+    # rows don't have); render_grid is still used for the sortable,
+    # filterable, CSV-exportable grid itself.
+    render_grid(
         localized_frame(pd.DataFrame(rows)),
-        width="stretch",
-        hide_index=True,
         height=height,
+        key="repo_activity_" + "_".join(title_en.lower().split()),
     )
 
 
@@ -145,15 +152,15 @@ def _filtered_repository_activity(activity, filter_values):
 def _render_repository_kpis(activity):
     columns = st.columns(6, gap="small")
     values = (
-        (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"], "⌘"),
-        (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"], "◎"),
-        ("Commits", len(activity["commits"]), ACCENT["green"], "✓"),
-        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), ACCENT["teal"], "↻"),
-        ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"], "⌥"),
-        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"], "▤"),
+        (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"], "repo"),
+        (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"], "contributor"),
+        ("Commits", len(activity["commits"]), ACCENT["green"], "check"),
+        (tr("Pushes", "عمليات الرفع"), len(activity["pushes"]), ACCENT["teal"], "refresh"),
+        ("Pull Requests", len(activity["pull_requests"]), ACCENT["gold"], "pull-request"),
+        (tr("Changed files", "الملفات المتغيرة"), len(activity["changes"]), ACCENT["pink"], "files"),
     )
     for column, (label, value, accent, icon) in zip(columns, values):
-        kpi_card(column, label, value, accent, icon=icon)
+        kpi_card(column, label, value, accent, icon=icon_svg(icon))
 
 
 def _render_repository_tables(activity, failures):
@@ -161,27 +168,35 @@ def _render_repository_tables(activity, failures):
     with table_col:
         _activity_table("Contributor summary", "ملخص المساهمين", activity["contributors"])
     with chart_col:
-        section_header("Commits per contributor", "Commits لكل مساهم", "⌘")
+        section_header("Commits per contributor", "Commits لكل مساهم", icon_svg("repo"))
         if activity["contributors"]:
             commit_load = [
                 {"member": row["Contributor"], "commits": row["Commits"]}
                 for row in activity["contributors"]
             ]
-            st.altair_chart(dashboard_theme.hbar_chart(
-                pd.DataFrame(commit_load), "commits", "member",
-                chart_theme, color=ACCENT["blue"],
-            ), width="stretch")
+            st.plotly_chart(
+                plotly_charts.hbar_chart(
+                    pd.DataFrame(commit_load), "commits", "member",
+                    chart_theme, color=ACCENT["blue"],
+                ),
+                width="stretch",
+                config={"displaylogo": False},
+            )
     pr_status = Counter(row.get("Status", "") for row in activity["pull_requests"])
     status_col, inventory_col = st.columns([1, 1.4])
     with status_col:
-        section_header("Pull request outcomes", "نتائج Pull Requests", "⌥")
+        section_header("Pull request outcomes", "نتائج Pull Requests", icon_svg("pull-request"))
         if pr_status:
-            st.altair_chart(dashboard_theme.donut_chart(
-                pd.DataFrame({"status": list(pr_status), "total": list(pr_status.values())}),
-                "status", "total", chart_theme,
-                colors={"completed": ACCENT["green"], "active": ACCENT["blue"],
-                        "abandoned": ACCENT["red"]},
-            ), width="stretch")
+            st.plotly_chart(
+                plotly_charts.generic_donut(
+                    pd.DataFrame({"status": list(pr_status), "total": list(pr_status.values())}),
+                    "status", "total", chart_theme,
+                    colors={"completed": ACCENT["green"], "active": ACCENT["blue"],
+                            "abandoned": ACCENT["red"]},
+                ),
+                width="stretch",
+                config={"displaylogo": False},
+            )
     with inventory_col:
         _activity_table("Repository inventory", "قائمة المستودعات", activity["repositories"])
     _activity_table("Complete commit history", "كل تاريخ Commits", activity["commits"], 520)

@@ -9,6 +9,7 @@ no behavior/styling changes).
 import pandas as pd
 import streamlit as st
 
+from components.grid import render_grid
 from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 
 ctx = st.session_state["app_ctx"]
@@ -32,7 +33,7 @@ df = pd.DataFrame([{
     "Tags": "; ".join(i["tags"]) or "Untagged", "Parent ID": i["parent"], "Azure Link": i["url"],
 } for i in all_items])
 if not df.empty:
-    st.dataframe(localized_frame(df), width="stretch", hide_index=True, height=520)
+    render_grid(localized_frame(df), items=all_items, height=520, key="raw_data_grid")
 else:
     st.info(tr(
         "No raw data loaded. Sync Azure DevOps or provide a workbook.",

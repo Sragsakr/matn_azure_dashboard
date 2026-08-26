@@ -8,8 +8,9 @@ only, no behavior/styling changes).
 
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
+from components.icons import icon_svg
+from components import charts as plotly_charts
 from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
@@ -37,12 +38,16 @@ if not areas.empty:
             column_config=percentage_columns("Scope %", "Task %"),
         )
     with chart_col:
-        section_header("Delivery items per area", "عناصر التسليم لكل مجال", "◇")
+        section_header("Delivery items per area", "عناصر التسليم لكل مجال", icon_svg("area"))
         area_load = areas.rename(columns={"Area": "area", "Total": "total"})[
             ["area", "total"]
         ]
-        st.altair_chart(dashboard_theme.hbar_chart(
-            area_load, "total", "area", chart_theme, color=ACCENT["gold"],
-        ), width="stretch")
+        st.plotly_chart(
+            plotly_charts.hbar_chart(
+                area_load, "total", "area", chart_theme, color=ACCENT["gold"],
+            ),
+            width="stretch",
+            config={"displaylogo": False},
+        )
 else:
     st.dataframe(localized_frame(areas), width="stretch", hide_index=True)

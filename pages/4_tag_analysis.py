@@ -11,8 +11,9 @@ from collections import defaultdict
 import pandas as pd
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
+from components.icons import icon_svg
+from components import charts as plotly_charts
 from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
@@ -52,14 +53,18 @@ for tag, members in sorted(tag_map.items(), key=lambda x: -len(x[1])):
 tag_frame = pd.DataFrame(rows)
 chart_col, table_col = st.columns([1, 1.3])
 with chart_col:
-    section_header("Items per tag", "العناصر لكل وسم", "#")
+    section_header("Items per tag", "العناصر لكل وسم", icon_svg("tag"))
     if not tag_frame.empty:
         tag_counts = tag_frame.rename(columns={"Tag": "tag", "Items": "items"})[
             ["tag", "items"]
         ]
-        st.altair_chart(dashboard_theme.hbar_chart(
-            tag_counts, "items", "tag", chart_theme, color=ACCENT["teal"],
-        ), width="stretch")
+        st.plotly_chart(
+            plotly_charts.hbar_chart(
+                tag_counts, "items", "tag", chart_theme, color=ACCENT["teal"],
+            ),
+            width="stretch",
+            config={"displaylogo": False},
+        )
 with table_col:
     st.dataframe(
         localized_frame(tag_frame), width="stretch", hide_index=True,

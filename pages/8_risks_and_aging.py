@@ -11,6 +11,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+from components.grid import render_grid
 from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from core.analysis import STALE_DAYS, PB, is_open
 
@@ -44,4 +45,4 @@ for i in ordered:
         "Sprint": i["sprint"], "Area": i["area"], "Tags": "; ".join(i["tags"]) or "Untagged",
         "Azure Link": i["url"],
     })
-st.dataframe(localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True, height=500)
+render_grid(localized_frame(pd.DataFrame(rows)), items=ordered, height=500, key="risks_aging_grid")

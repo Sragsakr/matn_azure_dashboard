@@ -11,6 +11,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+from components.grid import render_grid
 from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from core.analysis import STALE_DAYS, is_open, is_active
 
@@ -37,8 +38,9 @@ def priority(item):
     return "High"
 
 
+ordered_items = sorted(open_items, key=lambda x: priority(x))
 rows = []
-for i in sorted(open_items, key=lambda x: priority(x)):
+for i in ordered_items:
     rows.append({
         "Priority": priority(i), "ID": i["id"], "Title": i["title"], "Type": i["type"],
         "State": i["state"], "Board Column": i["board_column"],
@@ -48,6 +50,9 @@ for i in sorted(open_items, key=lambda x: priority(x)):
         "Azure Link": i["url"],
     })
 if rows:
-    st.dataframe(localized_frame(pd.DataFrame(rows)), width="stretch", hide_index=True, height=500)
+    render_grid(
+        localized_frame(pd.DataFrame(rows)), items=ordered_items,
+        height=500, key="active_now_grid",
+    )
 else:
     st.success(tr("No open work — all done!", "لا يوجد عمل مفتوح — كل العناصر مكتملة!"))
