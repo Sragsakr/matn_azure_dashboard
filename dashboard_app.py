@@ -751,7 +751,7 @@ def render_executive():
         st.warning(tr("No work items to chart yet.", "لا توجد عناصر عمل لعرضها."))
         return
 
-    columns = st.columns(6, gap="small")
+    columns = st.columns(6)
     kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"],
               icon="%", subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
     kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"],
@@ -775,7 +775,16 @@ def render_executive():
          "Completion %": percent(prog[work_type]["pct"])}
         for work_type in DELIVERY_TYPES
     ])
-    table_col, chart_col = st.columns([1, 1.15])
+    chart_col, table_col = st.columns([1.15, 1])
+    with chart_col:
+        type_colors = {
+            "Epic": ACCENT["purple"], "Feature": ACCENT["blue"],
+            "User Story": ACCENT["teal"], "Task": ACCENT["green"], "Bug": ACCENT["red"],
+        }
+        st.altair_chart(dashboard_theme.donut_chart(
+            prog_df.rename(columns={"Work Type": "kind", "Total": "total"}),
+            "kind", "total", chart_theme, colors=type_colors,
+        ), width="stretch")
     with table_col:
         st.dataframe(
             localized_frame(prog_df), width="stretch", hide_index=True,
@@ -787,15 +796,6 @@ def render_executive():
                     localized_label("Done"), format="%d"),
             },
         )
-    with chart_col:
-        type_colors = {
-            "Epic": ACCENT["purple"], "Feature": ACCENT["blue"],
-            "User Story": ACCENT["teal"], "Task": ACCENT["green"], "Bug": ACCENT["red"],
-        }
-        st.altair_chart(dashboard_theme.donut_chart(
-            prog_df.rename(columns={"Work Type": "kind", "Total": "total"}),
-            "kind", "total", chart_theme, colors=type_colors,
-        ), width="stretch")
     hier_txt = tr(
         "child→parent roll-up active ✅",
         "تجميع نتائج الأبناء إلى العناصر الرئيسية مفعّل ✅",
@@ -816,10 +816,7 @@ def render_executive():
         "Completed": ACCENT["green"], "InProgress": ACCENT["blue"],
         "Resolved": ACCENT["teal"], "Proposed": ACCENT["gold"], "Removed": ACCENT["red"],
     }
-    table_col, chart_col = st.columns([1, 1.2])
-    with table_col:
-        st.caption(tr("Exact Azure states and canonical categories", "حالات Azure الفعلية وتصنيفاتها"))
-        st.dataframe(localized_frame(state_df), width="stretch", hide_index=True)
+    chart_col, table_col = st.columns([1.2, 1])
     with chart_col:
         st.caption(tr("Items by Azure Board column and category", "العناصر حسب عمود اللوحة والتصنيف"))
         board_flow = pd.DataFrame([
@@ -831,6 +828,9 @@ def render_executive():
         st.altair_chart(dashboard_theme.stacked_hbar_chart(
             board_flow, "column", "category", "items", chart_theme
         ), width="stretch")
+    with table_col:
+        st.caption(tr("Exact Azure states and canonical categories", "حالات Azure الفعلية وتصنيفاتها"))
+        st.dataframe(localized_frame(state_df), width="stretch", hide_index=True)
 
     section_header("Delivery momentum", "زخم التسليم", "⚡")
     week_frame = weekly_creation_closure(dev)
@@ -995,12 +995,7 @@ def render_team_analysis():
     st.caption(tr("Team contribution is measured through completed Tasks.", "تُقاس مساهمة أعضاء الفريق من خلال المهام المكتملة."))
     team = team_df()
     if not team.empty:
-        table_col, chart_col = st.columns([1, 1.4])
-        with table_col:
-            st.dataframe(
-                localized_frame(team), width="stretch", hide_index=True,
-                column_config=percentage_columns("Task Completion %"),
-            )
+        chart_col, table_col = st.columns([1.4, 1])
         with chart_col:
             section_header("Tasks per member", "المهام لكل عضو", "◎")
             member_load = team.rename(columns={"Assignee": "member", "Tasks": "tasks"})[
@@ -1010,6 +1005,11 @@ def render_team_analysis():
                 member_load, "tasks", "member", chart_theme,
                 color=ACCENT["purple"],
             ), width="stretch")
+        with table_col:
+            st.dataframe(
+                localized_frame(team), width="stretch", hide_index=True,
+                column_config=percentage_columns("Task Completion %"),
+            )
     else:
         st.dataframe(localized_frame(team), width="stretch", hide_index=True)
 
@@ -1039,12 +1039,7 @@ def render_area_analysis():
     st.caption(tr("Scope and execution across Azure Area Paths.", "توزيع النطاق والتنفيذ حسب مسارات Azure."))
     areas = area_df()
     if not areas.empty:
-        table_col, chart_col = st.columns([1, 1.4])
-        with table_col:
-            st.dataframe(
-                localized_frame(areas), width="stretch", hide_index=True,
-                column_config=percentage_columns("Scope %", "Task %"),
-            )
+        chart_col, table_col = st.columns([1.4, 1])
         with chart_col:
             section_header("Delivery items per area", "عناصر التسليم لكل مجال", "◇")
             area_load = areas.rename(columns={"Area": "area", "Total": "total"})[
@@ -1053,6 +1048,11 @@ def render_area_analysis():
             st.altair_chart(dashboard_theme.hbar_chart(
                 area_load, "total", "area", chart_theme, color=ACCENT["gold"],
             ), width="stretch")
+        with table_col:
+            st.dataframe(
+                localized_frame(areas), width="stretch", hide_index=True,
+                column_config=percentage_columns("Scope %", "Task %"),
+            )
     else:
         st.dataframe(localized_frame(areas), width="stretch", hide_index=True)
 
@@ -1251,7 +1251,7 @@ def _filtered_repository_activity(activity, filter_values):
 
 
 def _render_repository_kpis(activity):
-    columns = st.columns(6, gap="small")
+    columns = st.columns(6)
     values = (
         (tr("Repositories", "المستودعات"), len(activity["repositories"]), ACCENT["blue"], "⌘"),
         (tr("Contributors", "المساهمون"), len(activity["contributors"]), ACCENT["purple"], "◎"),
@@ -1265,9 +1265,7 @@ def _render_repository_kpis(activity):
 
 
 def _render_repository_tables(activity, failures):
-    table_col, chart_col = st.columns([1, 1.4])
-    with table_col:
-        _activity_table("Contributor summary", "ملخص المساهمين", activity["contributors"])
+    chart_col, table_col = st.columns([1.4, 1])
     with chart_col:
         section_header("Commits per contributor", "Commits لكل مساهم", "⌘")
         if activity["contributors"]:
@@ -1279,6 +1277,8 @@ def _render_repository_tables(activity, failures):
                 pd.DataFrame(commit_load), "commits", "member",
                 chart_theme, color=ACCENT["blue"],
             ), width="stretch")
+    with table_col:
+        _activity_table("Contributor summary", "ملخص المساهمين", activity["contributors"])
     pr_status = Counter(row.get("Status", "") for row in activity["pull_requests"])
     status_col, inventory_col = st.columns([1, 1.4])
     with status_col:
