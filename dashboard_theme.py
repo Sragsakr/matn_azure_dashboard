@@ -44,14 +44,12 @@ def _configure(chart, theme, title=None, legend_columns=None):
     if legend_columns:
         legend_kwargs.update(columns=legend_columns, labelLimit=140, symbolSize=80)
     chart = (
-        chart.properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
-        .configure_view(stroke=None)
+        chart.configure_view(stroke=None)
         .configure(background="transparent")
         .configure_axis(
             labelColor=theme["muted"], titleColor=theme["muted"],
             gridColor=theme["line"], domainColor=theme["line"],
             labelFontSize=11, titleFontSize=12, labelFont=theme["font"],
-            labelPadding=6,
         )
         .configure_legend(**legend_kwargs)
         .configure_title(color=theme["ink"], fontSize=13, anchor="start")

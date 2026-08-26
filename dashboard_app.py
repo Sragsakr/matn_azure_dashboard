@@ -646,18 +646,24 @@ prog = type_progress(dev)
 # ---- Sidebar navigation: one section per tab, mirroring the Excel workbook
 PAGES = {
     "Executive Dashboard": ("◈  Executive overview", "◈  النظرة التنفيذية"),
-    "Sprint Summary": ("⏱  Sprint summary", "⏱  ملخص السبرينت"),
+    "Sprint Summary": ("◷  Sprint summary", "◷  ملخص السبرينت"),
     "Sprint Board": ("▦  Sprint board", "▦  لوحة السبرينت"),
     "Tag Analysis": ("#  Tag analysis", "#  تحليل الوسوم"),
-    "Team Analysis": ("👥  Team delivery", "👥  أداء الفريق"),
+    "Team Analysis": ("◎  Team delivery", "◎  أداء الفريق"),
     "Area Analysis": ("◇  Area analysis", "◇  تحليل المجالات"),
     "Active Now": ("⚡  Active now", "⚡  العمل الحالي"),
-    "Risks & Aging": ("⚠  Risks & aging", "⚠  المخاطر والتقادم"),
+    "Risks & Aging": ("△  Risks & aging", "△  المخاطر والتقادم"),
     "Data Quality": ("✓  Data quality", "✓  جودة البيانات"),
+<<<<<<< HEAD
 <<<<<<< HEAD
     "Repository Intelligence": ("📊  Repository intelligence", "📊  ذكاء المستودعات"),
     "Releases": ("🏆  Releases", "🏆  الإصدارات"),
     "Raw Data": ("📁  Raw data", "📁  البيانات الخام"),
+=======
+    "Repository Intelligence": ("⌘  Repository intelligence", "⌘  ذكاء المستودعات"),
+    "Releases": ("🚩  Releases", "🚩  الإصدارات"),
+    "Raw Data": ("▤  Raw data", "▤  البيانات الخام"),
+>>>>>>> parent of 70ce5f9 (Match sidebar icons to approved mockup, fix chart label clipping)
 }
 # Grouped purely for sidebar presentation — every PAGES key appears in exactly
 # one group. Streamlit has no native nested/grouped radio, so each group is
