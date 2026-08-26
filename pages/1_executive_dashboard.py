@@ -4,6 +4,13 @@ pages/1_executive_dashboard.py
 Executive Dashboard page. Rendering logic moved verbatim from
 dashboard_app.py's render_executive() (Phase 2 multipage restructure —
 structural move only, no behavior/styling changes).
+
+Phase 3 (component library reference implementation): this page is the
+first to use the new components/ package — icons.py (stroke SVG icon set
+replacing Unicode glyphs), kpi_card.py (stylable_container-based KPI
+cards), and charts.py (Plotly versions of this page's three Altair charts,
+plus a brand-new Epic->Feature->User Story->Task sunburst/treemap view).
+No other page's rendering was touched in this phase.
 """
 
 from collections import Counter
@@ -11,9 +18,10 @@ from collections import Counter
 import pandas as pd
 import streamlit as st
 
-import dashboard_theme
 from dashboard_styles import section_header
-from core.ui_helpers import kpi_card
+from components.icons import icon_svg
+from components.kpi_card import kpi_card
+from components import charts as plotly_charts
 from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
@@ -61,22 +69,22 @@ if not dev:
 else:
     columns = st.columns(6, gap="small")
     kpi_card(columns[0], tr("Story scope done", "نطاق القصص المكتمل"), f"{scope['scope_pct'] or 0:.0%}", ACCENT["green"],
-              icon="%", subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
+              icon=icon_svg("percent"), subcaption=tr(f"{scope['stories_done']} of {scope['stories']} stories", f"{scope['stories_done']} من {scope['stories']} قصة"))
     kpi_card(columns[1], tr("Task completion", "اكتمال المهام"), f"{scope['task_pct'] or 0:.0%}", ACCENT["blue"],
-              icon="✓", subcaption=tr(f"{scope['tasks_done']} of {scope['tasks']} tasks", f"{scope['tasks_done']} من {scope['tasks']} مهمة"))
+              icon=icon_svg("check"), subcaption=tr(f"{scope['tasks_done']} of {scope['tasks']} tasks", f"{scope['tasks_done']} من {scope['tasks']} مهمة"))
     kpi_card(columns[2], tr("Active now", "قيد التنفيذ"), all_m["active"], ACCENT["purple"],
-              icon="⚡", subcaption=tr("items in progress", "عنصر نشط الآن"))
+              icon=icon_svg("active"), subcaption=tr("items in progress", "عنصر نشط الآن"))
     kpi_card(columns[3], tr("Unassigned", "بدون مسؤول"), all_m["unassigned"], ACCENT["red"],
-              icon="!", subcaption=tr("tasks need an owner", "مهمة تحتاج تعيين"))
+              icon=icon_svg("warning"), subcaption=tr("tasks need an owner", "مهمة تحتاج تعيين"))
     backlog_count = sum(1 for item in dev if item["sprint"] == PB)
     kpi_card(columns[4], tr("Product backlog", "قائمة المنتج"), backlog_count, ACCENT["gold"],
-              icon="▤", subcaption=tr("items with no sprint", "عنصر بدون سبرينت"))
+              icon=icon_svg("folder"), subcaption=tr("items with no sprint", "عنصر بدون سبرينت"))
     kpi_card(columns[5], tr("Stale ≥14d", "متقادم ≥14 يوم"), all_m["stale"], ACCENT["amber"],
-              icon="⏱", subcaption=tr("no delay" if not all_m["stale"] else "needs attention", "لا يوجد تأخير" if not all_m["stale"] else "يحتاج متابعة"))
+              icon=icon_svg("clock"), subcaption=tr("no delay" if not all_m["stale"] else "needs attention", "لا يوجد تأخير" if not all_m["stale"] else "يحتاج متابعة"))
 
     section_header(
         "Completion by work type",
-        "الاكتمال حسب نوع عنصر العمل", "◈")
+        "الاكتمال حسب نوع عنصر العمل", icon_svg("executive"))
     prog_df = pd.DataFrame([
         {"Work Type": work_type, "Total": prog[work_type]["total"],
          "Done": prog[work_type]["done"],
@@ -96,14 +104,30 @@ else:
             },
         )
     with chart_col:
-        type_colors = {
-            "Epic": ACCENT["purple"], "Feature": ACCENT["blue"],
-            "User Story": ACCENT["teal"], "Task": ACCENT["green"], "Bug": ACCENT["red"],
-        }
-        st.altair_chart(dashboard_theme.donut_chart(
-            prog_df.rename(columns={"Work Type": "kind", "Total": "total"}),
-            "kind", "total", chart_theme, colors=type_colors,
-        ), width="stretch")
+        donut_tab, hierarchy_tab = st.tabs([
+            tr("By type", "حسب النوع"),
+            tr("Hierarchy", "التسلسل الهرمي"),
+        ])
+        with donut_tab:
+            st.plotly_chart(
+                plotly_charts.completion_donut(prog_df, chart_theme),
+                width="stretch",
+                config={"displaylogo": False},
+            )
+        with hierarchy_tab:
+            layout_choice = st.radio(
+                tr("Layout", "التخطيط"),
+                [tr("Sunburst", "شعاعي"), tr("Treemap", "خريطة شجرية")],
+                horizontal=True, label_visibility="collapsed",
+                key="exec_hierarchy_layout",
+            )
+            if layout_choice == tr("Sunburst", "شعاعي"):
+                hierarchy_fig = plotly_charts.completion_sunburst(
+                    dev, prog, chart_theme, DELIVERY_TYPES)
+            else:
+                hierarchy_fig = plotly_charts.completion_treemap(
+                    dev, prog, chart_theme, DELIVERY_TYPES)
+            st.plotly_chart(hierarchy_fig, width="stretch", config={"displaylogo": False})
     hier_txt = tr(
         "child→parent roll-up active ✅",
         "تجميع نتائج الأبناء إلى العناصر الرئيسية مفعّل ✅",
@@ -113,7 +137,7 @@ else:
     )
     st.caption(tr(f"Hierarchy: {hier_txt}", f"التسلسل الهرمي: {hier_txt}"))
 
-    section_header("Current board flow", "تدفق العمل الحالي", "▦")
+    section_header("Current board flow", "تدفق العمل الحالي", icon_svg("board"))
     state_df = pd.DataFrame([
         {"State": state, "Category": category, "Items": count}
         for (state, category), count in Counter(
@@ -132,16 +156,19 @@ else:
                 (i["board_column"], i["state_category"]) for i in dev
             ).most_common()
         ])
-        st.altair_chart(dashboard_theme.stacked_hbar_chart(
-            board_flow, "column", "category", "items", chart_theme
-        ), width="stretch")
+        st.plotly_chart(
+            plotly_charts.board_flow_bar(board_flow, chart_theme),
+            width="stretch",
+            config={"displaylogo": False},
+        )
 
-    section_header("Delivery momentum", "زخم التسليم", "⚡")
+    section_header("Delivery momentum", "زخم التسليم", icon_svg("active"))
     week_frame = weekly_creation_closure(dev)
     if week_frame.empty:
         st.info(tr("No dated items yet.", "لا توجد عناصر بتواريخ بعد."))
     else:
-        st.altair_chart(dashboard_theme.area_trend_chart(
-            week_frame, "period", ("Closed", "Created"),
-            {"Closed": ACCENT["green"], "Created": ACCENT["blue"]}, chart_theme,
-        ), width="stretch")
+        st.plotly_chart(
+            plotly_charts.momentum_area(week_frame, chart_theme),
+            width="stretch",
+            config={"displaylogo": False},
+        )
