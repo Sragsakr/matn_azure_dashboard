@@ -36,7 +36,8 @@ WORKBOOK = "Delivery_Manager_Dashboard.xlsx"
 DONE = {"Closed", "Done", "Resolved", "Completed"}
 ACTIVE = {"Active", "In Progress", "Committed"}
 TERMINAL_CATEGORIES = {"Completed", "Removed"}
-DELIVERY_TYPES = ("Epic", "Feature", "User Story", "Task", "Bug")
+DELIVERY_TYPES = ("Epic", "Feature", "User Story", "Task", "Bug",
+                  "Test Case", "Test Suite", "Test Plan")
 DEV_TYPES = set(DELIVERY_TYPES)
 STALE_DAYS = 14
 PB = "Product Backlog"  # project-only iteration label
@@ -183,8 +184,15 @@ def _wi(w):
         "type": (f.get("System.WorkItemType") or "Unknown"),
         "state": state,
         "state_category": _category(state, w.get("_state_category")),
-        "board_column": f.get("System.BoardColumn") or state,
-        "board_column_done": bool(f.get("System.BoardColumnDone")),
+        "board_column": f.get("System.BoardColumn")
+        or f.get("_board_column")
+        or state,
+        "board_column_done": bool(
+            f.get("System.BoardColumnDone")
+            or f.get("_board_column_done")
+            or (f.get("System.BoardColumn") or f.get("_board_column")) in
+            {"Closed", "Done", "Resolved", "Completed"}
+        ),
         "board_lane": f.get("System.BoardLane") or "Default",
         "assignee": (f.get("System.AssignedTo") or {}).get("displayName")
         if isinstance(f.get("System.AssignedTo"), dict) else (f.get("System.AssignedTo") or "Unassigned"),
