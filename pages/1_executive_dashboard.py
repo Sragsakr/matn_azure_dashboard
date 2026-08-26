@@ -28,10 +28,11 @@ from core.ui_helpers import (
     localized_label as _ui_localized_label,
     percentage_columns as _ui_percentage_columns,
     delivery_action as _ui_delivery_action,
+    require_app_ctx,
 )
 from core.analysis import DELIVERY_TYPES, PB, percent, weekly_creation_closure
 
-ctx = st.session_state["app_ctx"]
+ctx = require_app_ctx()
 is_ar = ctx["is_ar"]
 tr = lambda en, ar: _ui_tr(en, ar, is_ar)
 localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)

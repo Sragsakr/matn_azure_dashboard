@@ -26,6 +26,31 @@ def pat():
     return os.environ.get("AZDO_PAT")
 
 
+def require_app_ctx():
+    """Return st.session_state["app_ctx"], or stop the page with a
+    friendly message if it isn't there yet.
+
+    app.py builds app_ctx after loading data (and calls st.stop() early
+    if there's none). Streamlit's multipage router can still dispatch a
+    request straight to a page's URL without running app.py's body first
+    in that same request (e.g. a bookmarked/crawled page URL as the very
+    first hit of a session) — in that case app_ctx was never set, and a
+    bare `st.session_state["app_ctx"]` raises an unhandled KeyError.
+    Every page should call this instead of indexing session_state
+    directly, so that request lands on a clear message pointing back to
+    the app's entry point instead of a crash.
+    """
+    ctx = st.session_state.get("app_ctx")
+    if ctx is None:
+        st.info(
+            "Loading… if this message doesn't go away, open the app from "
+            "its home page.\n\n"
+            "جارٍ التحميل… إذا لم تختفِ هذه الرسالة، افتح التطبيق من صفحته الرئيسية."
+        )
+        st.stop()
+    return ctx
+
+
 def tr(english, arabic, is_ar):
     return _tr(english, arabic, is_ar)
 

@@ -10,9 +10,9 @@ import pandas as pd
 import streamlit as st
 
 from components.grid import render_grid
-from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame, require_app_ctx
 
-ctx = st.session_state["app_ctx"]
+ctx = require_app_ctx()
 is_ar = ctx["is_ar"]
 items = ctx["items"]
 data_mode = ctx["data_mode"]

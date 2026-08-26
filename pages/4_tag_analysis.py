@@ -18,10 +18,11 @@ from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
     percentage_columns as _ui_percentage_columns,
+    require_app_ctx,
 )
 from core.analysis import STALE_DAYS, item_metrics, scope_metrics, percent
 
-ctx = st.session_state["app_ctx"]
+ctx = require_app_ctx()
 is_ar = ctx["is_ar"]
 chart_theme = ctx["chart_theme"]
 ACCENT = ctx["ACCENT"]

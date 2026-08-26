@@ -15,10 +15,11 @@ from core.ui_helpers import (
     tr as _ui_tr,
     localized_frame as _ui_localized_frame,
     percentage_columns as _ui_percentage_columns,
+    require_app_ctx,
 )
 from core.analysis import sprint_summary_df as _sprint_summary_df
 
-ctx = st.session_state["app_ctx"]
+ctx = require_app_ctx()
 is_ar = ctx["is_ar"]
 chart_theme = ctx["chart_theme"]
 ACCENT = ctx["ACCENT"]
