@@ -21,10 +21,13 @@ import requests
 import altair as alt
 import streamlit as st
 
+<<<<<<< HEAD
 import dashboard_theme
 from azure_repo_activity import AzureRepoActivityClient, contributor_rows
 from dashboard_styles import apply_theme, section_header
 
+=======
+>>>>>>> parent of f272999 (feat: add full-history Azure Repos intelligence)
 # ---------------------------------------------------------------- constants
 ORG = "matnsolutions"
 PROJECT = "Hoteliana"
@@ -407,20 +410,6 @@ COLUMN_AR = {
     "Work Item ID": "معرف العنصر", "Work Item Type": "نوع العنصر", "Assigned To": "المسؤول",
     "Iteration Path": "مسار الدورة", "Area Path": "مسار المجال", "Story Points": "نقاط القصة",
     "Created Date": "تاريخ الإنشاء", "Changed Date": "تاريخ التعديل", "Board Column Done": "اكتمال عمود اللوحة",
-    "Repository": "المستودع", "Repository ID": "معرف المستودع", "Default Branch": "الفرع الافتراضي",
-    "Size (bytes)": "الحجم بالبايت", "Disabled": "معطّل", "Remote URL": "رابط الاستنساخ",
-    "Contributor": "المساهم", "Email": "البريد", "Repositories": "المستودعات", "Commits": "Commits",
-    "Pushes": "عمليات الرفع", "Pull Requests": "Pull Requests", "Commit ID": "معرف Commit",
-    "Short ID": "المعرف المختصر", "Message": "الرسالة", "Author": "الكاتب", "Author Email": "بريد الكاتب",
-    "Author Date": "تاريخ الكتابة", "Committer": "منفذ Commit", "Commit Date": "تاريخ Commit",
-    "Change Counts": "ملخص التغييرات", "Push ID": "معرف الرفع", "Pushed By": "رفع بواسطة",
-    "Pusher Email": "بريد من قام بالرفع", "Push Date": "تاريخ الرفع", "Branches": "الفروع",
-    "PR ID": "معرف PR", "Description": "الوصف", "Status": "الحالة", "Draft": "مسودة",
-    "Created By": "أنشأ بواسطة", "Creator Email": "بريد المنشئ", "Closed Date": "تاريخ الإغلاق",
-    "Source Branch": "فرع المصدر", "Target Branch": "الفرع المستهدف", "Reviewers": "المراجعون",
-    "Merge Status": "حالة الدمج", "Merge Commit": "Commit الدمج", "Change #": "رقم التغيير",
-    "Change Type": "نوع التغيير", "Path": "المسار", "Original Path": "المسار الأصلي",
-    "Git Object Type": "نوع Git", "Object ID": "معرف الكائن", "Operation": "العملية", "Error": "الخطأ",
 }
 
 
@@ -665,6 +654,7 @@ PAGES = {
     "Active Now": ("⚡  Active now", "⚡  العمل الحالي"),
     "Risks & Aging": ("⚠  Risks & aging", "⚠  المخاطر والتقادم"),
     "Data Quality": ("✓  Data quality", "✓  جودة البيانات"),
+<<<<<<< HEAD
     "Repository Intelligence": ("📊  Repository intelligence", "📊  ذكاء المستودعات"),
     "Releases": ("🏆  Releases", "🏆  الإصدارات"),
     "Raw Data": ("📁  Raw data", "📁  البيانات الخام"),
@@ -710,6 +700,21 @@ for (label_en, label_ar), group_keys in PAGE_GROUPS:
     )
 
 page = st.session_state["dashboard_page"]
+=======
+    "Releases": ("🚩  Releases", "🚩  الإصدارات"),
+    "Raw Data": ("▤  Raw data", "▤  البيانات الخام"),
+}
+st.sidebar.markdown(
+    f'<div class="sidebar-label">{tr("CORE OPERATIONS", "العمليات الأساسية")}</div>',
+    unsafe_allow_html=True,
+)
+page = st.sidebar.radio(
+    tr("Sections", "الأقسام"),
+    list(PAGES),
+    format_func=lambda key: PAGES[key][1 if is_ar else 0],
+    label_visibility="collapsed",
+)
+>>>>>>> parent of f272999 (feat: add full-history Azure Repos intelligence)
 st.sidebar.markdown(
     f'<div class="sidebar-label">{tr("SCOPE SNAPSHOT", "ملخص النطاق")}</div>',
     unsafe_allow_html=True,
@@ -1135,6 +1140,7 @@ def render_data_quality():
                  width="stretch", hide_index=True)
 
 
+<<<<<<< HEAD
 # ============================================================ REPOSITORY INTELLIGENCE
 def _repository_rows(rows, selected_repositories):
     return [row for row in rows if row.get("Repository") in selected_repositories]
@@ -1322,6 +1328,8 @@ def render_repository_intelligence():
     _render_repository_kpis(filtered)
     _render_repository_tables(filtered, activity["failures"])
 
+=======
+>>>>>>> parent of f272999 (feat: add full-history Azure Repos intelligence)
 # ============================================================ RELEASES
 def render_releases():
     st.header(tr("Releases", "الإصدارات"))
@@ -1382,8 +1390,6 @@ elif page == "Risks & Aging":
     render_risks()
 elif page == "Data Quality":
     render_data_quality()
-elif page == "Repository Intelligence":
-    render_repository_intelligence()
 elif page == "Releases":
     render_releases()
 elif page == "Raw Data":
