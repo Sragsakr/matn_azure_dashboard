@@ -13,13 +13,21 @@ import streamlit as st
 
 import dashboard_theme
 from dashboard_styles import section_header
-from app import tr, localized_frame, percentage_columns
+from core.ui_helpers import (
+    tr as _ui_tr,
+    localized_frame as _ui_localized_frame,
+    percentage_columns as _ui_percentage_columns,
+)
 from core.analysis import STALE_DAYS, item_metrics, scope_metrics, percent
 
 ctx = st.session_state["app_ctx"]
+is_ar = ctx["is_ar"]
 chart_theme = ctx["chart_theme"]
 ACCENT = ctx["ACCENT"]
 dev = ctx["dev"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
+percentage_columns = lambda *names: _ui_percentage_columns(*names, is_ar=is_ar)
 
 st.header(tr("Tag Analysis", "تحليل الوسوم"))
 st.caption(tr("Multi-tag items are counted once per tag; untagged work is explicit.", "يتم احتساب العنصر تحت كل وسم مع إظهار العناصر غير المصنفة."))

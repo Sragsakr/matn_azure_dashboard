@@ -38,7 +38,17 @@ from core.analysis import (
     weekly_creation_closure, sprint_summary_df as _sprint_summary_df,
     team_df as _team_df, area_df as _area_df,
 )
-from core.i18n import tr as _tr, column_label as _column_label, localized_frame as _localized_frame
+from core.ui_helpers import (
+    tr as _ui_tr,
+    column_label as _ui_column_label,
+    localized_frame as _ui_localized_frame,
+    localized_label as _ui_localized_label,
+    percentage_columns as _ui_percentage_columns,
+    delivery_action as _ui_delivery_action,
+    theme_chart as _ui_theme_chart,
+    kpi_card,
+    pat as _pat,
+)
 
 # ---------------------------------------------------------------- constants
 API_VERSION = "7.1"
@@ -51,17 +61,6 @@ def _auth_header(pat):
         "Authorization": "Basic " + base64.b64encode(f":{pat}".encode()).decode(),
         "Content-Type": "application/json",
     }
-
-
-def _pat():
-    """PAT from Streamlit secrets first, then env var."""
-    try:
-        s = st.secrets.get("AZDO_PAT")
-        if s:
-            return s
-    except Exception:
-        pass
-    return os.environ.get("AZDO_PAT")
 
 
 def _state_categories(base, headers, work_item_types):
@@ -196,67 +195,38 @@ def load_items(force_pull=True):
     return [], "empty"
 
 
+# ============================================================ UI HELPERS
+# Thin is_ar-bound wrappers around core.ui_helpers, kept so the rest of this
+# file can call these with the original zero-arg-for-locale call sites.
+# Pages must import the underlying core.ui_helpers functions directly with
+# an explicit is_ar argument instead — see core/ui_helpers.py docstring for
+# why importing these wrappers from app would break page navigation.
+def tr(english, arabic):
+    return _ui_tr(english, arabic, is_ar)
+
+
 def column_label(name):
-    return _column_label(name, is_ar)
+    return _ui_column_label(name, is_ar)
 
 
 def localized_frame(frame):
-    return _localized_frame(frame, is_ar)
-
-
-def percentage_columns(*names):
-    """Streamlit table formatting for numeric 0..100 percentage columns."""
-    return {
-        column_label(name): st.column_config.NumberColumn(column_label(name), format="%.1f%%")
-        for name in names
-    }
-
-
-def delivery_action(items, unassigned):
-    open_count = sum(is_open(i) for i in items)
-    if unassigned >= 25 and open_count:
-        return tr(
-            f"{unassigned} tasks are unassigned — assign owners first",
-            f"يوجد {unassigned} مهمة بدون مسؤول — ابدأ بتحديد المسؤولين",
-        )
-    scope_ = scope_metrics(items)
-    if items and scope_["scope_pct"] == 0 and open_count:
-        return tr(
-            "Scope stalled — no fully-complete story yet",
-            "النطاق متعطل — لا توجد قصة مكتملة بالكامل حتى الآن",
-        )
-    if any(i["type"] == "User Story" and i["sp"] is None for i in items):
-        return tr(
-            "Add Story Points to unestimated stories",
-            "أضف Story Points للقصص غير المقدّرة",
-        )
-    return tr("Delivery on track", "التسليم يسير حسب الخطة")
-
-
-# ============================================================ UI HELPERS
-def tr(english, arabic):
-    return _tr(english, arabic, is_ar)
-
-
-def theme_chart(chart):
-    """Apply the active Altair theme to a chart before rendering."""
-    return chart
-
-
-def kpi_card(column, label, value, accent, icon="◆", subcaption=None):
-    with column:
-        sub_html = f"<div class='kpi-sub'>{subcaption}</div>" if subcaption else ""
-        st.markdown(
-            f"<div class='kpi-card' style='--accent:{accent}'>"
-            f"<div class='kpi-card-top'><span class='kpi-label'>{label}</span>"
-            f"<span class='kpi-icon'>{icon}</span></div>"
-            f"<div class='kpi-value'>{value}</div>{sub_html}</div>",
-            unsafe_allow_html=True,
-        )
+    return _ui_localized_frame(frame, is_ar)
 
 
 def localized_label(name):
-    return column_label(name)
+    return _ui_localized_label(name, is_ar)
+
+
+def percentage_columns(*names):
+    return _ui_percentage_columns(*names, is_ar=is_ar)
+
+
+def delivery_action(items, unassigned):
+    return _ui_delivery_action(items, unassigned, is_ar)
+
+
+def theme_chart(chart):
+    return _ui_theme_chart(chart)
 
 
 # ---------------------------------------------------------------- rendering

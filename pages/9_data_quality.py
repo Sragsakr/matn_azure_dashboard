@@ -9,13 +9,16 @@ only, no behavior/styling changes).
 import pandas as pd
 import streamlit as st
 
-from app import tr, localized_frame
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from core.analysis import PB
 
 ctx = st.session_state["app_ctx"]
+is_ar = ctx["is_ar"]
 items = ctx["items"]
 dev = ctx["dev"]
 all_m = ctx["all_m"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
 
 st.header(tr("Data Quality & Trust", "جودة وموثوقية البيانات"))
 rows = [

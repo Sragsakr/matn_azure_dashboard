@@ -15,12 +15,17 @@ import streamlit as st
 
 import dashboard_theme
 from dashboard_styles import section_header
-from app import tr, kpi_card, localized_frame, ORG, PROJECT, _pat
+from core.analysis import ORG, PROJECT
+from core.ui_helpers import kpi_card, pat as _pat
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from azure_repo_activity import AzureRepoActivityClient, contributor_rows
 
 ctx = st.session_state["app_ctx"]
+is_ar = ctx["is_ar"]
 chart_theme = ctx["chart_theme"]
 ACCENT = ctx["ACCENT"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
 
 
 def _repository_rows(rows, selected_repositories):

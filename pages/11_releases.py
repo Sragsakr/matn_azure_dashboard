@@ -9,7 +9,11 @@ no behavior/styling changes).
 import pandas as pd
 import streamlit as st
 
-from app import tr, localized_frame
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
+
+is_ar = st.session_state["app_ctx"]["is_ar"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
 
 st.header(tr("Releases", "الإصدارات"))
 # Release plans / target dates are not part of the Azure work-item pull.

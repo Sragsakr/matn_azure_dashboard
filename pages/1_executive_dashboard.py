@@ -13,11 +13,23 @@ import streamlit as st
 
 import dashboard_theme
 from dashboard_styles import section_header
-from app import tr, kpi_card, localized_frame, localized_label, percentage_columns, delivery_action
+from core.ui_helpers import kpi_card
+from core.ui_helpers import (
+    tr as _ui_tr,
+    localized_frame as _ui_localized_frame,
+    localized_label as _ui_localized_label,
+    percentage_columns as _ui_percentage_columns,
+    delivery_action as _ui_delivery_action,
+)
 from core.analysis import DELIVERY_TYPES, PB, percent, weekly_creation_closure
 
 ctx = st.session_state["app_ctx"]
 is_ar = ctx["is_ar"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
+localized_label = lambda name: _ui_localized_label(name, is_ar)
+percentage_columns = lambda *names: _ui_percentage_columns(*names, is_ar=is_ar)
+delivery_action = lambda items, unassigned: _ui_delivery_action(items, unassigned, is_ar)
 chart_theme = ctx["chart_theme"]
 ACCENT = ctx["ACCENT"]
 dev = ctx["dev"]

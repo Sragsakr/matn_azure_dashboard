@@ -11,11 +11,14 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-from app import tr, localized_frame
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 from core.analysis import STALE_DAYS, PB, is_open
 
 ctx = st.session_state["app_ctx"]
+is_ar = ctx["is_ar"]
 dev = ctx["dev"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
 
 st.header(tr("Risks & Aging", "المخاطر والتقادم"))
 st.caption(tr("Open work ranked by days since creation.", "العمل المفتوح مرتب حسب عدد الأيام منذ الإنشاء."))

@@ -9,11 +9,14 @@ no behavior/styling changes).
 import pandas as pd
 import streamlit as st
 
-from app import tr, localized_frame
+from core.ui_helpers import tr as _ui_tr, localized_frame as _ui_localized_frame
 
 ctx = st.session_state["app_ctx"]
+is_ar = ctx["is_ar"]
 items = ctx["items"]
 data_mode = ctx["data_mode"]
+tr = lambda en, ar: _ui_tr(en, ar, is_ar)
+localized_frame = lambda frame: _ui_localized_frame(frame, is_ar)
 
 st.header(tr("Raw Data — all Azure work items", "البيانات الخام — جميع عناصر Azure"))
 st.caption(tr(f"{len(items):,} items from the current {data_mode} source.", f"عدد {len(items):,} عنصر من مصدر البيانات الحالي."))
