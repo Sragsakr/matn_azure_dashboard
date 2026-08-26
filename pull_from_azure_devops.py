@@ -87,44 +87,6 @@ def run_wiql():
     return [item["id"] for item in data.get("workItems", [])]
 
 
-def get_board_column_mapping():
-    """Map (work item type, state) -> board column using the team Boards API.
-
-    System.BoardColumn is empty for work items fetched via workitemsbatch, so we
-    derive the true kanban column from the board's stateMappings. Since each
-    board (Stories / Features / Epics / Taskboard) holds its own state set,
-    iterate every board the team exposes and merge all mappings."""
-    mapping = {}
-    teams_url = f"https://dev.azure.com/{ORG_NAME}/_apis/projects/{quote(PROJECT_NAME, safe='')}/teams?api-version={API_VERSION}"
-    try:
-        teams_resp = requests.get(teams_url, headers=AUTH_HEADER, timeout=20)
-        teams_resp.raise_for_status()
-        team_id = teams_resp.json()["value"][0]["id"]
-    except (requests.RequestException, IndexError, KeyError):
-        return mapping
-    board_root = f"https://dev.azure.com/{ORG_NAME}/{PROJECT_NAME}/{team_id}/_apis/work"
-    try:
-        boards_resp = requests.get(f"{board_root}/boards?api-version={API_VERSION}",
-                                   headers=AUTH_HEADER, timeout=20)
-        boards_resp.raise_for_status()
-    except requests.RequestException:
-        return mapping
-    for board in boards_resp.json().get("value", []):
-        bid = board.get("id")
-        if not bid:
-            continue
-        try:
-            br = requests.get(f"{board_root}/boards/{bid}?api-version={API_VERSION}",
-                              headers=AUTH_HEADER, timeout=20)
-            br.raise_for_status()
-        except requests.RequestException:
-            continue
-        for column in br.json().get("columns", []):
-            for wt, st in (column.get("stateMappings") or {}).items():
-                mapping[(wt, st)] = column["name"]
-    return mapping
-
-
 def get_work_items_batch(ids):
     """Fetch full field data for up to 200 work item IDs at a time."""
     fields = [
@@ -190,26 +152,6 @@ def write_to_workbook(items):
                   "Use the workbook Claude generated, or create that tab first.")
     ws = wb["Raw Data"]
 
-    board_columns = get_board_column_mapping()
-    # Attach the true kanban column: prefer the explicit WEF field (only on
-    # single-item GETs) else fall back to the board stateMappings.
-    for wi in items:
-        f = wi.get("fields", {})
-        explicit = f.get("System.BoardColumn")
-        if explicit:
-            f["_board_column"] = explicit
-        else:
-            f["_board_column"] = board_columns.get((
-                f.get("System.WorkItemType"), f.get("System.State")),
-                f.get("System.State") or ""  # Tasks/Test Cases: no board column -> use State
-            )
-        f["_board_column_done"] = bool(
-            f.get("System.BoardColumnDone") or
-            board_columns.get((f.get("System.WorkItemType"),
-                               f.get("System.State")), "") in {"Closed", "Done", "Resolved", "Completed"}
-            or f.get("System.State") in {"Closed", "Done", "Resolved", "Completed"}
-        )
-
     header_row = 5
     data_start = header_row + 1
     columns = [
@@ -218,8 +160,8 @@ def write_to_workbook(items):
         ("Work Item Type", "System.WorkItemType"),
         ("State", "System.State"),
         ("State Category", "_state_category"),
-        ("Board Column", "_board_column"),
-        ("Board Column Done", "_board_column_done"),
+        ("Board Column", "System.BoardColumn"),
+        ("Board Column Done", "System.BoardColumnDone"),
         ("Board Lane", "System.BoardLane"),
         ("Assigned To", "System.AssignedTo"),
         ("Iteration Path", "System.IterationPath"),
