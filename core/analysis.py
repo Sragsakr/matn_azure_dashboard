@@ -337,6 +337,59 @@ def team_df(dev):
     return pd.DataFrame(rows)
 
 
+def apply_global_filters(items, filters):
+    """Filter normalized work-item dicts against the Phase 4 global filter
+    bar's selections. Pure/testable — no Streamlit imports.
+
+    `filters` is a dict (typically st.session_state["global_filters"]) with
+    any subset of these keys (missing/empty/None means "no restriction"):
+      - "sprints":   list of `sprint` values to keep (matches core's own
+                     sprint normalization, i.e. _sprint()/PB values already
+                     present on each item)
+      - "assignees": list of `assignee` values to keep
+      - "types":     list of `type` values to keep
+      - "date_from": inclusive lower bound (datetime.date) on `created`
+      - "date_to":   inclusive upper bound (datetime.date) on `created`
+
+    Items with `created is None` are excluded whenever a date bound is
+    active (there is nothing to compare), but are kept when no date filter
+    is set — this mirrors how the rest of the app treats missing dates
+    (e.g. weekly_creation_closure() simply skips them) rather than
+    silently dropping otherwise-matching rows when no date filter applies.
+    """
+    if not filters:
+        return list(items)
+
+    sprints = filters.get("sprints") or None
+    assignees = filters.get("assignees") or None
+    types = filters.get("types") or None
+    date_from = filters.get("date_from")
+    date_to = filters.get("date_to")
+
+    sprints_set = set(sprints) if sprints else None
+    assignees_set = set(assignees) if assignees else None
+    types_set = set(types) if types else None
+
+    out = []
+    for item in items:
+        if sprints_set is not None and item.get("sprint") not in sprints_set:
+            continue
+        if assignees_set is not None and item.get("assignee") not in assignees_set:
+            continue
+        if types_set is not None and item.get("type") not in types_set:
+            continue
+        if date_from is not None or date_to is not None:
+            created = item.get("created")
+            if created is None:
+                continue
+            if date_from is not None and created < date_from:
+                continue
+            if date_to is not None and created > date_to:
+                continue
+        out.append(item)
+    return out
+
+
 def area_df(dev):
     rows = []
     for area in sorted({i["area"] for i in dev}, key=lambda a: -sum(1 for i in dev if i["area"] == a)):

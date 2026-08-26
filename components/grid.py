@@ -63,6 +63,8 @@ def render_grid(
     pin_first_column=True,
     height=420,
     key=None,
+    selectable=False,
+    selection_mode="single",
 ):
     """Render `data` (a DataFrame or list-of-dicts) as an interactive,
     sortable/filterable AgGrid with CSV export.
@@ -73,6 +75,11 @@ def render_grid(
       red-tinted background using core.analysis's own staleness rule.
     - `pin_first_column`: pins the first column so wide tables stay
       navigable (headers/IDs stay visible while scrolling horizontally).
+    - `selectable`: when True, enables row selection (click a row to select
+      it) and switches update_mode to SELECTION_CHANGED so the returned
+      grid_response.selected_rows reflects clicks without a full rerun lag.
+      Used by pages/5_team_analysis.py for Phase 4 click-to-filter (select
+      a member's row -> filter the rest of the app to that assignee).
     - CSV export is built in via st_aggrid's own toolbar download button.
 
     Returns the underlying AgGrid return object (grid_response), in case a
@@ -94,6 +101,13 @@ def render_grid(
         if helper_col in frame.columns:
             builder.configure_column(helper_col, hide=True)
 
+    if selectable:
+        builder.configure_selection(
+            selection_mode=selection_mode,
+            use_checkbox=False,
+            suppressRowClickSelection=False,
+        )
+
     builder.configure_grid_options(
         getRowStyle=_STALE_ROW_STYLE_JS,
         suppressColumnVirtualisation=True,
@@ -104,7 +118,7 @@ def render_grid(
         frame,
         gridOptions=grid_options,
         height=height,
-        update_mode=GridUpdateMode.NO_UPDATE,
+        update_mode=GridUpdateMode.SELECTION_CHANGED if selectable else GridUpdateMode.NO_UPDATE,
         allow_unsafe_jscode=True,
         show_toolbar=True,
         show_download_button=True,

@@ -49,6 +49,7 @@ from core.ui_helpers import (
     kpi_card,
     pat as _pat,
 )
+from components.filter_bar import render_filter_bar
 
 # ---------------------------------------------------------------- constants
 API_VERSION = "7.1"
@@ -344,6 +345,19 @@ if not dev:
     st.info("If you are self-hosting without a workbook, the app needs live Azure access "
             "via AZDO_PAT to load any data.")
     st.stop()
+
+# Phase 4: persistent global filter bar — rendered once here, below the
+# enterprise header and above every page's content. Filters `dev` before
+# all_m/scope/verdict/prog are derived from it, so the filtered result
+# flows into app_ctx and every page automatically sees filtered data
+# through the same app_ctx mechanism, with zero per-page changes.
+dev = render_filter_bar(dev, is_ar=is_ar)
+
+if not dev:
+    st.info(tr(
+        "No items match the current filters. Adjust or clear them above.",
+        "لا توجد عناصر مطابقة للفلاتر الحالية. عدّلها أو امسحها أعلاه.",
+    ))
 
 # Precompute shared analysis once (executive-only metrics used by sidebar).
 all_m = item_metrics(dev)
